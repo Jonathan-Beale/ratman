@@ -1,0 +1,20 @@
+# Based on working simple-HRNet implementation
+# https://github.com/stefanopini/simple-HRNet
+
+torch>=1.4.0
+torchvision>=0.5.0
+numpy>=1.16
+opencv-python>=3.4
+Pillow>=5.4
+matplotlib>=3.0.2
+tqdm>=4.26
+tensorboard>=1.11
+
+# Optional but recommended
+munkres>=1.1.2
+ffmpeg-python>=0.2.0
+
+# If using MMPose
+mmpose>=1.0.0
+mmcv>=2.0.0
+mmengine>=0.7.0
