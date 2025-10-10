@@ -1,0 +1,23 @@
+# .gitignore
+
+# 1. Output/Inference Directory
+# Hides the folder where all visualized inferences are saved
+inference/
+
+# 2. Model Checkpoints
+# Hides the trained model weights
+maskrcnn_coco_model.pth
+
+# 3. Virtual Environment (common practice)
+# Hides common virtual environment folders
+venv/
+
+# 4. Python cache and artifacts
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# 5. OS files
+.DS_Store
+Thumbs.db
