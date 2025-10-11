@@ -1,0 +1,32 @@
+#RUN "pip install -r requirements.txt"
+
+# Core deep learning
+torch>=2.2.0
+torchvision>=0.17.0
+
+# YOLOv12 / Ultralytics framework
+ultralytics>=8.2.0
+
+# Image and video processing
+opencv-python>=4.10.0.84
+Pillow>=10.3.0
+numpy>=1.26.0
+
+# Plotting and visualization (optional but useful)
+matplotlib>=3.8.0
+
+# Hugging Face hub support (for model downloads)
+huggingface_hub>=0.23.0
+
+# tqdm for progress bars
+tqdm>=4.66.1
+
+# If you plan to use custom datasets in COCO or YT-VOS format
+pycocotools>=2.0.7
+
+# If using Jupyter or Colab for testing
+ipython
+jupyter
+
+# Optional - performance boost for GPUs (won’t break if unavailable)
+flash-attn==2.7.3  # optional, will be ignored if unsupported
