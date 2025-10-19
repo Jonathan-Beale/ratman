@@ -5,7 +5,7 @@ import torch
 import cv2
 import numpy as np
 import yaml
-from hrnet_official_model import get_pose_net
+from hrnet_model import get_pose_net
 import os
 
 
