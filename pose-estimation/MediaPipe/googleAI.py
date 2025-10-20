@@ -21,25 +21,32 @@ else:
     next_index = 1
 
 # put your input image path here
-input_image_path = "results/output_simon_gettyimages-1177643064-0169d811744c50e93e38eb67537162652733bb0a.jpg"
+input_image_path = "results/Output_20251020_115344.png"
 
-prompt = """Use the input image as an exact reference for the entire scene. 
-Follow all Mediapipe-detected skeleton keypoints and joint angles for the main character precisely. 
-Do NOT change limb positions, angles, or orientation. 
-Do NOT reposition any characters, objects, props, or background elements. 
-Keep the size, scale, perspective, and relative distances of all elements identical to the input image. 
-The skeleton is only for pose guidance — do NOT show it. 
+prompt = """
+IMPORTANT: DO NOT ZOOM IN OR ZOOM OUT. DO NOT CROP OR RECENTER. THE OUTPUT MUST MATCH THE INPUT EXACTLY IN FRAMING AND COMPOSITION.
 
-Replace only the main character with Batman in Jim Aparo’s comic book art style, keeping the exact same pose, facing, and position. 
-Batman must appear in his **classic, iconic appearance** — the dark gray suit with the black bat symbol on his chest, blue cowl, cape, gloves, boots, and briefs, and a yellow utility belt. 
-His face must be fully covered by the Batman cowl except for the lower jaw. 
-Do NOT include any text, numbers, names, or logos on his suit, cape, or anywhere in the image. 
-Do NOT mix Batman with any other character, version, or human — he must be 100% Batman, not hybrid, mutated, or stylized beyond Jim Aparo’s realistic comic look. 
-Do NOT make Batman wear sports uniforms, armor, mechanical enhancements, or alternate versions from other universes. 
+Use the input image as an exact, pixel-level reference for the entire scene. 
+The output must be a one-to-one visual replacement — the framing, camera distance, crop, and field of view must remain absolutely identical to the input. 
+The output image must perfectly align with the input when overlaid, with no camera movement, zooming, recentering, or reframing of any kind. 
+Do NOT add borders, padding, or background extensions. The composition must match at the pixel level.
 
-Render all other characters, objects, and the background exactly as in the input image, but fully in cartoon/comic style. 
-Preserve the lighting, shadows, and perspective as in the input image. 
-Ensure the final result looks like a hand-drawn comic panel with bold ink lines, expressive shading, and a fully cartoon environment, while maintaining perfect scene fidelity."""
+Follow all Mediapipe-detected skeleton keypoints and joint angles for the main character precisely and invisibly. 
+The skeleton and its keypoints are for pose guidance only — they must NEVER appear, be drawn, or be visible in any form in the final image. 
+
+Do NOT alter or shift the position, scale, or orientation of any body parts. 
+Every limb angle, joint rotation, and pose detail must exactly match the input image with no deviation. 
+Keep all characters, props, and background elements in the exact same position, direction, scale, and perspective as in the input image.
+
+Replace only the main character with Batman in Jim Aparo’s comic book style, maintaining the same body proportions, posture, facing, and silhouette as the original. 
+Do NOT add or modify any costume details beyond this description. 
+Do NOT include any text, labels, or logos anywhere.
+
+Render the entire scene in a unified, Jim Aparo–style comic aesthetic: bold line art, inked outlines, and expressive shading. 
+Maintain the same lighting, shadows, and perspective as the input photo. 
+Every object and background element must remain identical in placement and proportion but restyled into comic art. 
+The final image must look like a single cohesive comic panel, without any visual overlays, outlines, skeletons, or guides visible.
+"""
 
 
 
