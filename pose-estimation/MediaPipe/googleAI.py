@@ -5,20 +5,36 @@ from PIL import Image
 from io import BytesIO
 
 # api key for authentication
-client = genai.Client(api_key="putyourapikeyhere") # make sure the api key has access to Gemini API, its somehting weird with google accounts
+client = genai.Client(api_key="apikey_goes_here")
 
 # check if the output folder exists, if not create it
 output_folder = "AIgenerated"
 os.makedirs(output_folder, exist_ok=True)
 
-# put your input image path here
-input_image_path = "results/output_istockphoto-179137240-612x612.jpg" 
+# get the next available image number
+existing_files = [f for f in os.listdir(output_folder) if f.startswith("generated_image_") and f.endswith(".png")]
+if existing_files:
+    # find the largest number currently used
+    existing_numbers = [int(f.split("_")[2].split(".")[0]) for f in existing_files]
+    next_index = max(existing_numbers) + 1
+else:
+    next_index = 1
 
-prompt = (
-    "Use the human pose skeleton keypoints and joints in the image I sent, "
-    "replacing the character with Batman while keeping the same pose. "
-    "Stylize it in Jim Aparo’s Batman comic book art style."
-)
+# put your input image path here
+input_image_path = "results/output_superman_2025_movie-wallpaper-3840x2160.jpg"
+
+prompt = """Use the input image as an exact reference for the entire scene. 
+Follow all Mediapipe-detected skeleton keypoints and joint angles for the main character precisely. 
+Do NOT change limb positions, angles, or orientation. 
+Do NOT reposition any characters, objects, props, or background elements. 
+Keep the size, scale, perspective, and relative distances of all elements identical to the input image. 
+The skeleton is only for pose guidance — do NOT show it. 
+Replace only the main character with Batman in Jim Aparo’s comic book art style, keeping the exact same pose, facing, and position. 
+Render all other characters, objects, and the background exactly as in the input image, but fully in cartoon/comic style. 
+Preserve the lighting, shadows, and perspective as in the input image. 
+Ensure the final result looks like a hand-drawn comic panel with bold ink lines, expressive shading, and a fully cartoon environment, while maintaining perfect scene fidelity."""
+
+
 
 # load the input image
 image = Image.open(input_image_path)
@@ -37,7 +53,7 @@ response = client.models.generate_content(
 for i, part in enumerate(response.parts):
     if part.inline_data:
         generated_image = Image.open(BytesIO(part.inline_data.data))
-        output_path = os.path.join(output_folder, f"generated_image_{i+1}.png")
+        output_path = os.path.join(output_folder, f"generated_image_{next_index + i}.png")
         generated_image.save(output_path)
         print(f"✅ Saved: {output_path}")
         generated_image.show()
