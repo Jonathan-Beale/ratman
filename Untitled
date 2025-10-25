@@ -1,0 +1,26 @@
+# Python Virtual Environment
+# This is local to your machine and will break on others
+venv/
+yolov8-env/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Model Weights
+# These are too large for Git!
+*.pt
+*.pth
+
+# Gradio Cache
+# As seen in your terminal logs
+gradio_cached_examples/
+
+# Ultralytics Output
+# This is where YOLO saves your detected images/videos
+runs/
+
+# OS & IDE Files
+.DS_Store
+.vscode/
+.idea/
