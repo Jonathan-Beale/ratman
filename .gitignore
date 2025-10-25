@@ -20,8 +20,7 @@ coco_subset/
 
 # Exclude Weights
 pose-estimation/HRNet/hrnet_weights/*
-*.pt
-*.pth
+instance-segmentation/yolov8/*.pt
 
 # Ignore the README file specifically in pose-estimation/hrnet
 pose-estimation/HRNet/README
