@@ -5,7 +5,7 @@ from PIL import Image
 from io import BytesIO
 
 # api key for authentication
-client = genai.Client(api_key="apikey")
+client = genai.Client(api_key="AIzaSyA7D-kvDgeMQlyO-d8t06wBKL3X8a6qknA")
 
 # check if the output folder exists, if not create it
 output_folder = "AIgenerated"
