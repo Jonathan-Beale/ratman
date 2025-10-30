@@ -1,0 +1,9 @@
+torch
+diffusers
+transformers
+accelerate
+safetensors
+opencv-python
+pillow
+numpy
+mediapipe
