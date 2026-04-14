@@ -26,6 +26,9 @@ instance-segmentation/yolov8/*.pt
 pose-estimation/HRNet/README
 pose-estimation/HRNet/README.md
 
+# Blender autosave backups
+*.blend1
+
 # (Optional but recommended) Ignore Python cache and build artifacts
 __pycache__/
 */__pycache__/
@@ -43,6 +46,7 @@ MultiPose/tools/ComfyUI/
 # Output
 output/
 */output/
+**/Renders/*
 exp_output/
 */exp_output/
 */mlruns/

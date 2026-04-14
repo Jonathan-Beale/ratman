@@ -357,11 +357,16 @@ class Pose2VideoPipeline(DiffusionPipeline):
         context_overlap=4,
         context_batch_size=1,
         interpolation_factor=1,
+        ref_width=None,
+        ref_height=None,
         **kwargs,
     ):
         # Default height and width to unet
         height = height or self.unet.config.sample_size * self.vae_scale_factor
         width = width or self.unet.config.sample_size * self.vae_scale_factor
+        # Reference image resolution — defaults to output resolution if not specified
+        ref_width  = ref_width  or width
+        ref_height = ref_height or height
 
         device = self._execution_device
 
@@ -420,8 +425,8 @@ class Pose2VideoPipeline(DiffusionPipeline):
 
         # Prepare ref image latents
         ref_image_tensor = self.ref_image_processor.preprocess(
-            ref_image, height=height, width=width
-        )  # (bs, c, width, height)
+            ref_image, height=ref_height, width=ref_width
+        )  # (bs, c, ref_width, ref_height)
         ref_image_tensor = ref_image_tensor.to(
             dtype=self.vae.dtype, device=self.vae.device
         )

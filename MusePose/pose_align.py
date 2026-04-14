@@ -277,19 +277,17 @@ def run_align_video_with_filterPose_translate_smooth(args):
     detector = detector.to(device)
 
     refer_img = cv2.imread(imgfn_refer)
-    output_refer, pose_refer = detector(refer_img,detect_resolution=args.detect_resolution, image_resolution=args.image_resolution, output_type='cv2',return_pose_dict=True)
+    refer_img_rgb = cv2.cvtColor(refer_img, cv2.COLOR_BGR2RGB)
+    output_refer, pose_refer = detector(refer_img_rgb, detect_resolution=args.detect_resolution, image_resolution=args.image_resolution, output_type='cv2', return_pose_dict=True)
     body_ref_img  = pose_refer['bodies']['candidate']
     hands_ref_img = pose_refer['hands']
     faces_ref_img = pose_refer['faces']
     output_refer = cv2.cvtColor(output_refer, cv2.COLOR_RGB2BGR)
-    
+
 
     skip_frames = args.align_frame
     max_frame = args.max_frame
-    pose_list, video_frame_buffer, video_pose_buffer = [], [], []
-
-
-    # Debug code removed
+    pose_list, video_frame_buffer, video_pose_buffer, raw_pose_dict_buffer = [], [], [], []
 
 
     for i in range(max_frame):
@@ -305,7 +303,8 @@ def run_align_video_with_filterPose_translate_smooth(args):
        
         # estimate scale parameters by the 1st frame in the video
         if i==skip_frames:
-            output_1st_img, pose_1st_img = detector(img, args.detect_resolution, args.image_resolution, output_type='cv2', return_pose_dict=True)
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            output_1st_img, pose_1st_img = detector(img_rgb, args.detect_resolution, args.image_resolution, output_type='cv2', return_pose_dict=True)
             body_1st_img  = pose_1st_img['bodies']['candidate']
             hands_1st_img = pose_1st_img['hands']
             faces_1st_img = pose_1st_img['faces']
@@ -318,10 +317,25 @@ def run_align_video_with_filterPose_translate_smooth(args):
             4. 由于 dwpose 的输出本来就是归一化的坐标，所以h不需要变，w要乘W/H
             注意：dwpose 输出是 (w, h)
             '''
-            
+
             # h不变，w缩放到原比例
             ref_H, ref_W = refer_img.shape[0], refer_img.shape[1]
             ref_ratio = ref_W / ref_H
+
+            # Check whether the reference image has a valid, anatomically plausible
+            # body pose. Cartoon images often return detections with inverted
+            # skeletons (neck below hips) or all-zero scores — treat both as
+            # undetected so the scale=1.0 fallback is used instead.
+            ref_has_landmarks = np.any(body_ref_img[:, 0] > 0)
+            ref_neck_y = body_ref_img[1, 1]
+            ref_hip_y  = (body_ref_img[8, 1] + body_ref_img[11, 1]) / 2
+            ref_anatomy_ok = ref_neck_y < ref_hip_y  # neck must be above hips
+            ref_detected = ref_has_landmarks and ref_anatomy_ok
+            if ref_has_landmarks and not ref_anatomy_ok:
+                print(f"Warning: reference image skeleton is anatomically invalid "
+                      f"(neck y={ref_neck_y:.3f} >= hip y={ref_hip_y:.3f}); "
+                      f"falling back to scale=1.0.")
+
             body_ref_img[:, 0]  = body_ref_img[:, 0] * ref_ratio
             hands_ref_img[:, :, 0] = hands_ref_img[:, :, 0] * ref_ratio
             faces_ref_img[:, :, 0] = faces_ref_img[:, :, 0] * ref_ratio
@@ -331,109 +345,126 @@ def run_align_video_with_filterPose_translate_smooth(args):
             hands_1st_img[:, :, 0] = hands_1st_img[:, :, 0] * video_ratio
             faces_1st_img[:, :, 0] = faces_1st_img[:, :, 0] * video_ratio
 
-            # scale
-            align_args = dict()
-            
-            dist_1st_img = np.linalg.norm(body_1st_img[0]-body_1st_img[1])   # 0.078   
-            dist_ref_img = np.linalg.norm(body_ref_img[0]-body_ref_img[1])   # 0.106
-            align_args["scale_neck"] = dist_ref_img / dist_1st_img  # align / pose = ref / 1st
-
-            dist_1st_img = np.linalg.norm(body_1st_img[16]-body_1st_img[17])
-            dist_ref_img = np.linalg.norm(body_ref_img[16]-body_ref_img[17])
-            align_args["scale_face"] = dist_ref_img / dist_1st_img
-
-            dist_1st_img = np.linalg.norm(body_1st_img[2]-body_1st_img[5])  # 0.112
-            dist_ref_img = np.linalg.norm(body_ref_img[2]-body_ref_img[5])  # 0.174
-            align_args["scale_shoulder"] = dist_ref_img / dist_1st_img  
-
-            dist_1st_img = np.linalg.norm(body_1st_img[2]-body_1st_img[3])  # 0.895
-            dist_ref_img = np.linalg.norm(body_ref_img[2]-body_ref_img[3])  # 0.134
-            s1 = dist_ref_img / dist_1st_img
-            dist_1st_img = np.linalg.norm(body_1st_img[5]-body_1st_img[6])
-            dist_ref_img = np.linalg.norm(body_ref_img[5]-body_ref_img[6])
-            s2 = dist_ref_img / dist_1st_img
-            align_args["scale_arm_upper"] = (s1+s2)/2 # 1.548
-
-            dist_1st_img = np.linalg.norm(body_1st_img[3]-body_1st_img[4])
-            dist_ref_img = np.linalg.norm(body_ref_img[3]-body_ref_img[4])
-            s1 = dist_ref_img / dist_1st_img
-            dist_1st_img = np.linalg.norm(body_1st_img[6]-body_1st_img[7])
-            dist_ref_img = np.linalg.norm(body_ref_img[6]-body_ref_img[7])
-            s2 = dist_ref_img / dist_1st_img
-            align_args["scale_arm_lower"] = (s1+s2)/2
-
-            # hand
-            dist_1st_img = np.zeros(10)
-            dist_ref_img = np.zeros(10)      
-             
-            dist_1st_img[0] = np.linalg.norm(hands_1st_img[0,0]-hands_1st_img[0,1])
-            dist_1st_img[1] = np.linalg.norm(hands_1st_img[0,0]-hands_1st_img[0,5])
-            dist_1st_img[2] = np.linalg.norm(hands_1st_img[0,0]-hands_1st_img[0,9])
-            dist_1st_img[3] = np.linalg.norm(hands_1st_img[0,0]-hands_1st_img[0,13])
-            dist_1st_img[4] = np.linalg.norm(hands_1st_img[0,0]-hands_1st_img[0,17])
-            dist_1st_img[5] = np.linalg.norm(hands_1st_img[1,0]-hands_1st_img[1,1])
-            dist_1st_img[6] = np.linalg.norm(hands_1st_img[1,0]-hands_1st_img[1,5])
-            dist_1st_img[7] = np.linalg.norm(hands_1st_img[1,0]-hands_1st_img[1,9])
-            dist_1st_img[8] = np.linalg.norm(hands_1st_img[1,0]-hands_1st_img[1,13])
-            dist_1st_img[9] = np.linalg.norm(hands_1st_img[1,0]-hands_1st_img[1,17])
-
-            dist_ref_img[0] = np.linalg.norm(hands_ref_img[0,0]-hands_ref_img[0,1])
-            dist_ref_img[1] = np.linalg.norm(hands_ref_img[0,0]-hands_ref_img[0,5])
-            dist_ref_img[2] = np.linalg.norm(hands_ref_img[0,0]-hands_ref_img[0,9])
-            dist_ref_img[3] = np.linalg.norm(hands_ref_img[0,0]-hands_ref_img[0,13])
-            dist_ref_img[4] = np.linalg.norm(hands_ref_img[0,0]-hands_ref_img[0,17])
-            dist_ref_img[5] = np.linalg.norm(hands_ref_img[1,0]-hands_ref_img[1,1])
-            dist_ref_img[6] = np.linalg.norm(hands_ref_img[1,0]-hands_ref_img[1,5])
-            dist_ref_img[7] = np.linalg.norm(hands_ref_img[1,0]-hands_ref_img[1,9])
-            dist_ref_img[8] = np.linalg.norm(hands_ref_img[1,0]-hands_ref_img[1,13])
-            dist_ref_img[9] = np.linalg.norm(hands_ref_img[1,0]-hands_ref_img[1,17])
-
-            ratio = 0   
-            count = 0
-            for i in range (10): 
-                if dist_1st_img[i] != 0:
-                    ratio = ratio + dist_ref_img[i]/dist_1st_img[i]
-                    count = count + 1
-            if count!=0:
-                align_args["scale_hand"] = (ratio/count+align_args["scale_arm_upper"]+align_args["scale_arm_lower"])/3
+            if not ref_detected:
+                # Reference pose undetectable — use identity scaling and centre the
+                # actor's neck on the reference image's horizontal/vertical centre.
+                print("Warning: no body pose detected in reference image; "
+                      "falling back to scale=1.0 with centred offset.")
+                align_args = {k: 1.0 for k in [
+                    "scale_neck", "scale_face", "scale_shoulder",
+                    "scale_arm_upper", "scale_arm_lower", "scale_hand",
+                    "scale_body_len", "scale_leg_upper", "scale_leg_lower",
+                ]}
+                # Place actor's neck at the horizontal centre of the ref image,
+                # and at y=0.25 (upper quarter of frame) — a sensible default
+                # for a full-body character standing in frame.
+                ref_center_x = ref_ratio * 0.5
+                ref_neck_y   = 0.25
+                offset = np.array([ref_center_x, ref_neck_y]) - body_1st_img[1]
             else:
-                align_args["scale_hand"] = (align_args["scale_arm_upper"]+align_args["scale_arm_lower"])/2
+                # scale
+                align_args = dict()
 
-            # body 
-            dist_1st_img = np.linalg.norm(body_1st_img[1] - (body_1st_img[8] + body_1st_img[11])/2 )
-            dist_ref_img = np.linalg.norm(body_ref_img[1] - (body_ref_img[8] + body_ref_img[11])/2 )
-            align_args["scale_body_len"]=dist_ref_img / dist_1st_img
+                dist_1st_img = np.linalg.norm(body_1st_img[0]-body_1st_img[1])
+                dist_ref_img = np.linalg.norm(body_ref_img[0]-body_ref_img[1])
+                align_args["scale_neck"] = dist_ref_img / dist_1st_img
 
-            dist_1st_img = np.linalg.norm(body_1st_img[8]-body_1st_img[9])
-            dist_ref_img = np.linalg.norm(body_ref_img[8]-body_ref_img[9])
-            s1 = dist_ref_img / dist_1st_img
-            dist_1st_img = np.linalg.norm(body_1st_img[11]-body_1st_img[12])
-            dist_ref_img = np.linalg.norm(body_ref_img[11]-body_ref_img[12])
-            s2 = dist_ref_img / dist_1st_img
-            align_args["scale_leg_upper"] = (s1+s2)/2
+                dist_1st_img = np.linalg.norm(body_1st_img[16]-body_1st_img[17])
+                dist_ref_img = np.linalg.norm(body_ref_img[16]-body_ref_img[17])
+                align_args["scale_face"] = dist_ref_img / dist_1st_img
 
-            dist_1st_img = np.linalg.norm(body_1st_img[9]-body_1st_img[10])
-            dist_ref_img = np.linalg.norm(body_ref_img[9]-body_ref_img[10])
-            s1 = dist_ref_img / dist_1st_img
-            dist_1st_img = np.linalg.norm(body_1st_img[12]-body_1st_img[13])
-            dist_ref_img = np.linalg.norm(body_ref_img[12]-body_ref_img[13])
-            s2 = dist_ref_img / dist_1st_img
-            align_args["scale_leg_lower"] = (s1+s2)/2
+                dist_1st_img = np.linalg.norm(body_1st_img[2]-body_1st_img[5])
+                dist_ref_img = np.linalg.norm(body_ref_img[2]-body_ref_img[5])
+                align_args["scale_shoulder"] = dist_ref_img / dist_1st_img
 
-            ####################
-            ####################
-            # need adjust nan
-            for k,v in align_args.items():
-                if np.isnan(v):
-                    align_args[k]=1
+                dist_1st_img = np.linalg.norm(body_1st_img[2]-body_1st_img[3])
+                dist_ref_img = np.linalg.norm(body_ref_img[2]-body_ref_img[3])
+                s1 = dist_ref_img / dist_1st_img
+                dist_1st_img = np.linalg.norm(body_1st_img[5]-body_1st_img[6])
+                dist_ref_img = np.linalg.norm(body_ref_img[5]-body_ref_img[6])
+                s2 = dist_ref_img / dist_1st_img
+                align_args["scale_arm_upper"] = (s1+s2)/2
 
-            # centre offset (the offset of key point 1)
-            offset = body_ref_img[1] - body_1st_img[1]
+                dist_1st_img = np.linalg.norm(body_1st_img[3]-body_1st_img[4])
+                dist_ref_img = np.linalg.norm(body_ref_img[3]-body_ref_img[4])
+                s1 = dist_ref_img / dist_1st_img
+                dist_1st_img = np.linalg.norm(body_1st_img[6]-body_1st_img[7])
+                dist_ref_img = np.linalg.norm(body_ref_img[6]-body_ref_img[7])
+                s2 = dist_ref_img / dist_1st_img
+                align_args["scale_arm_lower"] = (s1+s2)/2
+
+                # hand
+                dist_1st_img = np.zeros(10)
+                dist_ref_img = np.zeros(10)
+
+                dist_1st_img[0] = np.linalg.norm(hands_1st_img[0,0]-hands_1st_img[0,1])
+                dist_1st_img[1] = np.linalg.norm(hands_1st_img[0,0]-hands_1st_img[0,5])
+                dist_1st_img[2] = np.linalg.norm(hands_1st_img[0,0]-hands_1st_img[0,9])
+                dist_1st_img[3] = np.linalg.norm(hands_1st_img[0,0]-hands_1st_img[0,13])
+                dist_1st_img[4] = np.linalg.norm(hands_1st_img[0,0]-hands_1st_img[0,17])
+                dist_1st_img[5] = np.linalg.norm(hands_1st_img[1,0]-hands_1st_img[1,1])
+                dist_1st_img[6] = np.linalg.norm(hands_1st_img[1,0]-hands_1st_img[1,5])
+                dist_1st_img[7] = np.linalg.norm(hands_1st_img[1,0]-hands_1st_img[1,9])
+                dist_1st_img[8] = np.linalg.norm(hands_1st_img[1,0]-hands_1st_img[1,13])
+                dist_1st_img[9] = np.linalg.norm(hands_1st_img[1,0]-hands_1st_img[1,17])
+
+                dist_ref_img[0] = np.linalg.norm(hands_ref_img[0,0]-hands_ref_img[0,1])
+                dist_ref_img[1] = np.linalg.norm(hands_ref_img[0,0]-hands_ref_img[0,5])
+                dist_ref_img[2] = np.linalg.norm(hands_ref_img[0,0]-hands_ref_img[0,9])
+                dist_ref_img[3] = np.linalg.norm(hands_ref_img[0,0]-hands_ref_img[0,13])
+                dist_ref_img[4] = np.linalg.norm(hands_ref_img[0,0]-hands_ref_img[0,17])
+                dist_ref_img[5] = np.linalg.norm(hands_ref_img[1,0]-hands_ref_img[1,1])
+                dist_ref_img[6] = np.linalg.norm(hands_ref_img[1,0]-hands_ref_img[1,5])
+                dist_ref_img[7] = np.linalg.norm(hands_ref_img[1,0]-hands_ref_img[1,9])
+                dist_ref_img[8] = np.linalg.norm(hands_ref_img[1,0]-hands_ref_img[1,13])
+                dist_ref_img[9] = np.linalg.norm(hands_ref_img[1,0]-hands_ref_img[1,17])
+
+                ratio = 0
+                count = 0
+                for i in range(10):
+                    if dist_1st_img[i] != 0:
+                        ratio = ratio + dist_ref_img[i]/dist_1st_img[i]
+                        count = count + 1
+                if count != 0:
+                    align_args["scale_hand"] = (ratio/count+align_args["scale_arm_upper"]+align_args["scale_arm_lower"])/3
+                else:
+                    align_args["scale_hand"] = (align_args["scale_arm_upper"]+align_args["scale_arm_lower"])/2
+
+                # body
+                dist_1st_img = np.linalg.norm(body_1st_img[1] - (body_1st_img[8] + body_1st_img[11])/2)
+                dist_ref_img = np.linalg.norm(body_ref_img[1] - (body_ref_img[8] + body_ref_img[11])/2)
+                align_args["scale_body_len"] = dist_ref_img / dist_1st_img
+
+                dist_1st_img = np.linalg.norm(body_1st_img[8]-body_1st_img[9])
+                dist_ref_img = np.linalg.norm(body_ref_img[8]-body_ref_img[9])
+                s1 = dist_ref_img / dist_1st_img
+                dist_1st_img = np.linalg.norm(body_1st_img[11]-body_1st_img[12])
+                dist_ref_img = np.linalg.norm(body_ref_img[11]-body_ref_img[12])
+                s2 = dist_ref_img / dist_1st_img
+                align_args["scale_leg_upper"] = (s1+s2)/2
+
+                dist_1st_img = np.linalg.norm(body_1st_img[9]-body_1st_img[10])
+                dist_ref_img = np.linalg.norm(body_ref_img[9]-body_ref_img[10])
+                s1 = dist_ref_img / dist_1st_img
+                dist_1st_img = np.linalg.norm(body_1st_img[12]-body_1st_img[13])
+                dist_ref_img = np.linalg.norm(body_ref_img[12]-body_ref_img[13])
+                s2 = dist_ref_img / dist_1st_img
+                align_args["scale_leg_lower"] = (s1+s2)/2
+
+                # need adjust nan
+                for k, v in align_args.items():
+                    if np.isnan(v):
+                        align_args[k] = 1
+
+                # centre offset (the offset of key point 1)
+                offset = body_ref_img[1] - body_1st_img[1]
         
     
         # pose align
-        pose_img, pose_ori = detector(img, args.detect_resolution, args.image_resolution, output_type='cv2', return_pose_dict=True)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pose_img, pose_ori = detector(img_rgb, args.detect_resolution, args.image_resolution, output_type='cv2', return_pose_dict=True)
         video_pose_buffer.append(pose_img)
+        raw_pose_dict_buffer.append(pose_ori)
         pose_align = align_img(img, pose_ori, align_args, args.detect_resolution, args.image_resolution)
         
 
@@ -462,12 +493,16 @@ def run_align_video_with_filterPose_translate_smooth(args):
     faces_seq        = np.stack(faces_list      , axis=0)
 
 
+    # Square output size for pose-only video: match actual input dims, padded to square
+    pose_sq = int(max(H_in, W_in) // 2 * 2)
+
     # concatenate and paint results
     H = 768 # paint height
     W1 = int((H/ref_H * ref_W)//2 *2)
     W2 = int((H/height * width)//2 *2)
-    result_demo = [] # = Writer(args, None, H, 3*W1+2*W2, outfn, fps)
-    result_pose_only = [] # Writer(args, None, H, W1, args.outfn_align_pose_video, fps)
+    result_demo = []
+    result_pose_only = []   # raw detection preview (sent to Discord)
+    result_aligned    = []  # aligned skeleton (fed to MusePose)
     for i in range(len(body_seq)):
         pose_t={}
         pose_t["bodies"]={}
@@ -479,28 +514,55 @@ def run_align_video_with_filterPose_translate_smooth(args):
         ref_img = cv2.cvtColor(refer_img, cv2.COLOR_RGB2BGR)
         ref_img = cv2.resize(ref_img, (W1, H))
         ref_pose= cv2.resize(output_refer, (W1, H))
-        
-        output_transformed = draw_pose(
-            pose_t, 
-            int(H_in*1024/W_in), 
-            1024, 
-            draw_face=False,
-            )
+
+        # Pose-only preview: raw detection drawn at exact input frame dims,
+        # same as inspect_frame.py — draw_pose(raw_pose, H, W)
+        raw_pose = raw_pose_dict_buffer[i]
+        pose_only_frame = draw_pose(raw_pose, int(H_in), int(W_in), draw_face=False)
+        pose_only_frame = cv2.cvtColor(pose_only_frame, cv2.COLOR_RGB2BGR)
+        # Pad to square at actual input resolution
+        ph, pw = pose_only_frame.shape[:2]
+        sq_draw = max(ph, pw)
+        pad_top    = (sq_draw - ph) // 2
+        pad_bottom = sq_draw - ph - pad_top
+        pad_left   = (sq_draw - pw) // 2
+        pad_right  = sq_draw - pw - pad_left
+        pose_only_frame = cv2.copyMakeBorder(
+            pose_only_frame, pad_top, pad_bottom, pad_left, pad_right,
+            cv2.BORDER_CONSTANT, value=0,
+        )
+        pose_only_frame = cv2.resize(pose_only_frame, (pose_sq, pose_sq))
+        result_pose_only.append(pose_only_frame)
+
+        # Aligned skeleton for MusePose and demo strip
+        output_transformed = draw_pose(pose_t, int(H_in), int(W_in), draw_face=False)
         output_transformed = cv2.cvtColor(output_transformed, cv2.COLOR_BGR2RGB)
-        output_transformed = cv2.resize(output_transformed, (W1, H))
-        
+        # Save full-res aligned frame (padded to square) for MusePose
+        aligned_frame = cv2.copyMakeBorder(
+            output_transformed,
+            (pose_sq - int(H_in)) // 2, pose_sq - int(H_in) - (pose_sq - int(H_in)) // 2,
+            (pose_sq - int(W_in)) // 2, pose_sq - int(W_in) - (pose_sq - int(W_in)) // 2,
+            cv2.BORDER_CONSTANT, value=0,
+        )
+        aligned_frame = cv2.resize(aligned_frame, (pose_sq, pose_sq))
+        result_aligned.append(aligned_frame)
+        output_transformed = cv2.resize(output_transformed, (W2, H))
         video_frame = cv2.resize(video_frame_buffer[i], (W2, H))
         video_pose  = cv2.resize(video_pose_buffer[i], (W2, H))
 
         res = np.concatenate([ref_img, ref_pose, output_transformed, video_frame, video_pose], axis=1)
         result_demo.append(res)
-        result_pose_only.append(output_transformed)
 
     print(f"pose_list len: {len(pose_list)}")
     clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(result_demo, fps=fps)
     clip.write_videofile(outfn, fps=fps)
+    # Raw detection preview — sent to Discord
     clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(result_pose_only, fps=fps)
     clip.write_videofile(args.outfn_align_pose_video, fps=fps)
+    # Aligned skeleton — fed to MusePose inference
+    if args.outfn_aligned_for_musepose:
+        clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(result_aligned, fps=fps)
+        clip.write_videofile(args.outfn_aligned_for_musepose, fps=fps)
     print('pose align done')
 
 
@@ -521,7 +583,8 @@ def main():
     parser.add_argument('--max_frame', type=int, default=300, help='maximum frame number of the video to align')
     parser.add_argument('--imgfn_refer', type=str, default="./assets/images/0.jpg", help='refer image path')
     parser.add_argument('--vidfn', type=str, default="./assets/videos/0.mp4", help='Input video path')
-    parser.add_argument('--outfn_align_pose_video', type=str, default=None, help='output path of the aligned video of the refer img')
+    parser.add_argument('--outfn_align_pose_video', type=str, default=None, help='output path of the raw-detection preview skeleton video (sent to Discord)')
+    parser.add_argument('--outfn_aligned_for_musepose', type=str, default=None, help='output path of the aligned skeleton video (fed to MusePose inference)')
     parser.add_argument('--outfn', type=str, default=None, help='Output path of the alignment visualization')
     args = parser.parse_args()
     

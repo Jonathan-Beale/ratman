@@ -1,6 +1,8 @@
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
+import time
+
 import os.path as osp
 import argparse
 import logging
@@ -33,9 +35,240 @@ from PIL import Image
 from tqdm.auto import tqdm
 from transformers import CLIPVisionModelWithProjection
 
-from musepose.dataset.dance_image import HumanDanceDataset
-# from musepose.dwpose import DWposeDetector  # Uncomment if you have this module
 from musepose.models.mutual_self_attention import ReferenceAttentionControl
+
+# ---- Inlined HumanDanceDataset ----
+import json
+import torchvision.transforms as transforms
+from decord import VideoReader
+from torch.utils.data import Dataset
+from transformers import CLIPImageProcessor
+
+class HumanDanceDataset(Dataset):
+    def __init__(
+        self,
+        img_size,
+        img_scale=(1.0, 1.0),
+        img_ratio=(0.9, 1.0),
+        drop_ratio=0.1,
+        data_meta_paths=["./data/fahsion_meta.json"],
+        sample_margin=30,
+    ):
+        super().__init__()
+
+        self.img_size = img_size
+        self.img_scale = img_scale
+        self.img_ratio = img_ratio
+        self.sample_margin = sample_margin
+
+        vid_meta = []
+        for data_meta_path in data_meta_paths:
+            vid_meta.extend(json.load(open(data_meta_path, "r")))
+        self.vid_meta = vid_meta
+
+        self.clip_image_processor = CLIPImageProcessor()
+
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(
+                    self.img_size,
+                ),
+                transforms.ToTensor(),
+                transforms.Normalize([0.5], [0.5]),
+            ]
+        )
+
+        self.cond_transform = transforms.Compose(
+            [
+                transforms.Resize(
+                    self.img_size,
+                ),
+                transforms.ToTensor(),
+            ]
+        )
+
+        self.drop_ratio = drop_ratio
+
+    def augmentation(self, image, transform, state=None):
+        if state is not None:
+            torch.set_rng_state(state)
+        return transform(image)
+
+
+    def __getitem__(self, index, retry_count=0):
+        start_time = time.time()
+        print(f"[DIAG] Enter __getitem__ index={index} retry_count={retry_count}")
+        DATASET_ROOT = os.path.abspath(os.path.join(os.getcwd(), 'datasets'))
+        def resolve_path(p):
+            if not p:
+                return p
+            if os.path.isabs(p):
+                return p
+            abs_path = os.path.join(DATASET_ROOT, p)
+            return abs_path
+
+        def timeout_handler(signum, frame):
+            raise TimeoutError("Timed out loading file")
+
+        import sys
+        import traceback
+        import signal
+        import os
+        MAX_RETRIES = 10
+
+        video_meta = self.vid_meta[index]
+        print(f"[DIAG] video_meta: {video_meta}")
+        video_path = resolve_path(video_meta.get("video_path", ""))
+        kps_path = resolve_path(video_meta["kps_path"])
+        kps_path_custom = resolve_path(video_meta.get("kps_path_custom", None))
+        print(f"[DIAG] video_path: {video_path}, kps_path: {kps_path}, kps_path_custom: {kps_path_custom}")
+
+        # Debug: print absolute paths and existence
+        try:
+            print(f"[DIAG] Attempting to open video/kps files at index {index}")
+            if video_path:
+                print(f"[DEBUG] video_path: {video_path} | exists: {os.path.exists(video_path)}")
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(10)  # 10 second timeout
+                video_reader = VideoReader(video_path)
+                signal.alarm(0)
+            else:
+                video_reader = None
+        except Exception as e:
+            print(f"[ERROR] Skipping video_path {video_path}: {e}")
+            traceback.print_exc(file=sys.stdout)
+            video_reader = None
+        try:
+            print(f"[DEBUG] kps_path: {kps_path} | exists: {os.path.exists(kps_path)}")
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(10)
+            kps_reader = VideoReader(kps_path)
+            signal.alarm(0)
+        except Exception as e:
+            print(f"[ERROR] Skipping kps_path {kps_path}: {e}")
+            traceback.print_exc(file=sys.stdout)
+            kps_reader = None
+        kps_custom_reader = None
+        if kps_path_custom:
+            try:
+                print(f"[DEBUG] kps_path_custom: {kps_path_custom} | exists: {os.path.exists(kps_path_custom)}")
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(10)
+                kps_custom_reader = VideoReader(kps_path_custom)
+                signal.alarm(0)
+            except Exception as e:
+                print(f"[ERROR] Skipping kps_path_custom {kps_path_custom}: {e}")
+                traceback.print_exc(file=sys.stdout)
+                kps_custom_reader = None
+
+        # Use skeleton length if video is missing
+        try:
+            print(f"[DIAG] Checking video/kps lengths at index {index}")
+            if video_reader is not None and kps_reader is not None:
+                assert len(video_reader) == len(kps_reader), f"{len(video_reader) = } != {len(kps_reader) = } in {video_path}"
+                if kps_custom_reader:
+                    assert (
+                        len(video_reader) == len(kps_custom_reader)
+                    ), f"{len(video_reader) = } != {len(kps_custom_reader) = } in {video_path}"
+                video_length = len(video_reader)
+            elif kps_reader is not None:
+                if kps_custom_reader:
+                    assert len(kps_reader) == len(kps_custom_reader), f"{len(kps_reader) = } != {len(kps_custom_reader) = } in {kps_path}"
+                video_length = len(kps_reader)
+            else:
+                raise RuntimeError("No valid video or kps reader")
+        except Exception as e:
+            print(f"[ERROR] Skipping index {index} due to length assertion: {e}")
+            traceback.print_exc(file=sys.stdout)
+            if retry_count < MAX_RETRIES:
+                return self.__getitem__((index + 1) % len(self.vid_meta), retry_count=retry_count+1)
+            else:
+                print(f"[FATAL] Max retries ({MAX_RETRIES}) exceeded at index {index}. Raising error.")
+                raise
+
+        margin = min(self.sample_margin, video_length)
+
+        try:
+            print(f"[DIAG] Sampling indices and loading frames at index {index}")
+            ref_img_idx = random.randint(0, video_length - 1)
+            if ref_img_idx + margin < video_length:
+                tgt_img_idx = random.randint(ref_img_idx + margin, video_length - 1)
+            elif ref_img_idx - margin > 0:
+                tgt_img_idx = random.randint(0, ref_img_idx - margin)
+            else:
+                tgt_img_idx = random.randint(0, video_length - 1)
+
+            if video_reader is not None:
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(10)
+                ref_img = video_reader[ref_img_idx]
+                ref_img_pil = Image.fromarray(ref_img.asnumpy())
+                tgt_img = video_reader[tgt_img_idx]
+                tgt_img_pil = Image.fromarray(tgt_img.asnumpy())
+                signal.alarm(0)
+            else:
+                ref_img_pil = Image.new('RGB', self.img_size, (0, 0, 0))
+                tgt_img_pil = Image.new('RGB', self.img_size, (0, 0, 0))
+
+            if kps_reader is not None:
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(10)
+                tgt_pose_teacher = kps_reader[tgt_img_idx]
+                tgt_pose_teacher_pil = Image.fromarray(tgt_pose_teacher.asnumpy())
+                signal.alarm(0)
+            else:
+                raise RuntimeError("No valid kps_reader for pose teacher")
+
+            tgt_pose_student_img = None
+            if kps_custom_reader:
+                try:
+                    signal.signal(signal.SIGALRM, timeout_handler)
+                    signal.alarm(10)
+                    tgt_pose_student = kps_custom_reader[tgt_img_idx]
+                    tgt_pose_student_pil = Image.fromarray(tgt_pose_student.asnumpy())
+                    tgt_pose_student_img = self.augmentation(
+                        tgt_pose_student_pil, self.cond_transform, torch.get_rng_state()
+                    )
+                    signal.alarm(0)
+                except Exception as e:
+                    print(f"[ERROR] Skipping custom pose for idx {index}: {e}")
+                    traceback.print_exc(file=sys.stdout)
+                    tgt_pose_student_img = None
+
+            state = torch.get_rng_state()
+            tgt_img = self.augmentation(tgt_img_pil, self.transform, state)
+            tgt_pose_teacher_img = self.augmentation(
+                tgt_pose_teacher_pil, self.cond_transform, state
+            )
+            ref_img_vae = self.augmentation(ref_img_pil, self.transform, state)
+            clip_image = self.clip_image_processor(
+                images=ref_img_pil, return_tensors="pt"
+            ).pixel_values[0]
+
+            sample = dict(
+                video_dir=video_path,
+                img=tgt_img,
+                tgt_pose_teacher=tgt_pose_teacher_img,
+                ref_img=ref_img_vae,
+                clip_images=clip_image,
+            )
+            if tgt_pose_student_img is not None:
+                sample["tgt_pose_student"] = tgt_pose_student_img
+
+            print(f"[DIAG] Successfully loaded sample at index {index} in {time.time() - start_time:.2f}s")
+            return sample
+        except Exception as e:
+            print(f"[ERROR] Skipping index {index} due to frame read or transform: {e}")
+            traceback.print_exc(file=sys.stdout)
+            if retry_count < MAX_RETRIES:
+                return self.__getitem__((index + 1) % len(self.vid_meta), retry_count=retry_count+1)
+            else:
+                print(f"[FATAL] Max retries ({MAX_RETRIES}) exceeded at index {index}. Raising error.")
+                raise
+
+    def __len__(self):
+        return len(self.vid_meta)
+# ---- End Inlined HumanDanceDataset ----
 from musepose.models.pose_guider import PoseGuider
 from musepose.models.unet_2d_condition import UNet2DConditionModel
 from musepose.models.unet_3d import UNet3DConditionModel
