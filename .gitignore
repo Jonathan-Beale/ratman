@@ -60,4 +60,5 @@ yolox*
 
 # assets
 */assets/
+DataGen/Assets/
 *.db
