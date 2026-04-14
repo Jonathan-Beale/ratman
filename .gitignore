@@ -51,6 +51,8 @@ exp_output/
 */exp_output/
 */mlruns/
 */meta/
+**/input_videos/
+**/output_videos/
 
 # models
 */pretrained_weights/
