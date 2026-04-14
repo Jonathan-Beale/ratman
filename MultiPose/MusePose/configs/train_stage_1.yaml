@@ -3,7 +3,7 @@ data:
   train_width: 256
   train_height: 256
   meta_paths:
-    - "./meta/training_meta.json"
+    - "/root/ratman/MultiPose/meta/training_meta.json"
   # Margin of frame indexes between ref and tgt images
   sample_margin: 30
 
@@ -57,13 +57,13 @@ resume_from_checkpoint: ''
 checkpointing_steps: 100
 save_model_epoch_interval: 1
 exp_name: 'stage_1'
-output_dir: './exp_output'
+output_dir: '/root/ratman/MultiPose/exp_output'
 
 # load pretrained weights
 load_pth: True
-denoising_unet_path: "./pretrained_weights/MusePose/denoising_unet.pth"
-reference_unet_path: "./pretrained_weights/MusePose/reference_unet.pth"
-pose_guider_path:    "./pretrained_weights/MusePose/pose_guider.pth"
+denoising_unet_path: "/root/ratman/MusePose/pretrained_weights/MusePose/denoising_unet.pth"
+reference_unet_path: "/root/ratman/MusePose/pretrained_weights/MusePose/reference_unet.pth"
+pose_guider_path:    "/root/ratman/MusePose/pretrained_weights/MusePose/pose_guider.pth"
 
 
 

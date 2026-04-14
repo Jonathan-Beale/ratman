@@ -28,6 +28,8 @@ pose-estimation/HRNet/README.md
 
 # (Optional but recommended) Ignore Python cache and build artifacts
 __pycache__/
+*/__pycache__/
+**/__pycache__/
 *.py[cod]
 *.egg-info/
 build/
@@ -36,3 +38,22 @@ dist/
 # Ignore generated outputs
 stable-diffusion/outputs/
 tools/ComfyUI/output/
+MultiPose/tools/ComfyUI/
+
+# Output
+output/
+*/output/
+exp_output/
+*/exp_output/
+*/mlruns/
+*/meta/
+
+# models
+*/pretrained_weights/
+pose_guider*
+yolox*
+*/configs/
+
+# assets
+*/assets/
+*.db

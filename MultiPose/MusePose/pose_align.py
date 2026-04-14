@@ -4,7 +4,13 @@ import torch
 import copy
 import cv2
 import os
+import sys
 import moviepy.video.io.ImageSequenceClip
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_MULTIPOSE_DIR = os.path.dirname(_SCRIPT_DIR)
+_MUSEPOSE_DIR = os.path.join(os.path.dirname(_MULTIPOSE_DIR), 'MusePose')
+sys.path.insert(0, _MUSEPOSE_DIR)
 
 from pose.script.dwpose import DWposeDetector, draw_pose
 from pose.script.util import size_calculate, warpAffine_kps

@@ -1,5 +1,11 @@
 import os
+import sys
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_MULTIPOSE_DIR = os.path.dirname(_SCRIPT_DIR)
+_MUSEPOSE_DIR = os.path.join(os.path.dirname(_MULTIPOSE_DIR), 'MusePose')
+sys.path.insert(0, _MUSEPOSE_DIR)
 
 import os.path as osp
 import argparse
@@ -606,7 +612,7 @@ def save_checkpoint(model, save_dir, prefix, ckpt_num, total_limit=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="./configs/train_stage_1.yaml")
+    parser.add_argument("--config", type=str, default=os.path.join(_SCRIPT_DIR, "configs/train_stage_1.yaml"))
     args = parser.parse_args()
 
     if args.config[-5:] == ".yaml":

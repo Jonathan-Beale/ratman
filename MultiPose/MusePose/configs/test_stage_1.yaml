@@ -17,9 +17,9 @@ weight_dtype: 'fp16'
 
 
 test_cases:
-  "./assets/videos/VID_20260203_154431864.mp4":
+  "/root/ratman/MultiPose/assets/videos/VID_20260203_154431864.mp4":
     - "pose_extraction"
-  "./assets/videos/VID_20260203_154444045.mp4":
+  "/root/ratman/MultiPose/assets/videos/VID_20260203_154444045.mp4":
     - "pose_extraction"
 
 
