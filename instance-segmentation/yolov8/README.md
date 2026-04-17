@@ -18,8 +18,7 @@ source venv/bin/activate
 
 You will also need:
 - `yolo12l-person-seg.pt` — place in this directory (excluded from repo, ~58MB)
-- On Mac: a local SD 1.5 model at `~/Projects/cleanRoom/magic_code/pretrained_models/stable-diffusion-v1-5`
-- On Windows: DreamShaper 8 downloads automatically from HuggingFace on first run
+- DreamShaper 8 downloads automatically from HuggingFace on first run (~2GB, cached locally after that)
 
 ## Usage (CLI)
 
