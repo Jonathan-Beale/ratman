@@ -1,6 +1,5 @@
 import argparse
 import os
-import platform
 
 import cv2
 import numpy as np
@@ -11,16 +10,10 @@ from ultralytics import YOLO
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
-if platform.system() == "Windows":
-    YOLO_MODEL_PATH = os.path.join(_HERE, "yolo12l-person-seg.pt")
-    SD_BASE_MODEL_PATH = "Lykon/dreamshaper-8"  # much better quality, SD 1.5 compatible
-    SD_LOCAL_ONLY = False
-    OUTPUT_DIR = os.path.join(_HERE, "output")
-else:
-    YOLO_MODEL_PATH = os.path.join(_HERE, "yolo12l-person-seg.pt")
-    SD_BASE_MODEL_PATH = os.path.join(_HERE, "models", "stable-diffusion-v1-5")
-    SD_LOCAL_ONLY = True
-    OUTPUT_DIR = os.path.join(_HERE, "output")
+YOLO_MODEL_PATH = os.path.join(_HERE, "yolo12l-person-seg.pt")
+SD_BASE_MODEL_PATH = "Lykon/dreamshaper-8"
+SD_LOCAL_ONLY = False
+OUTPUT_DIR = os.path.join(_HERE, "output")
 
 NUM_INFERENCE_STEPS = 25       # DPM++ 25 steps — high quality overnight run
 GUIDANCE_SCALE = 10.0
