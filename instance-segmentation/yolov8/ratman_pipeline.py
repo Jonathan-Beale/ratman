@@ -42,7 +42,7 @@ def get_device_and_dtype():
     return "cpu", torch.float32
 
 
-def load_models():
+def load_models(lora_weights_path=None):
     device, dtype = get_device_and_dtype()
     print(f"Using device: {device} ({dtype})")
 
@@ -77,6 +77,12 @@ def load_models():
     print("Loading IP-Adapter weights...")
     pipe.load_ip_adapter("h94/IP-Adapter", subfolder="models", weight_name="ip-adapter_sd15.bin")
     pipe.set_ip_adapter_scale(IP_ADAPTER_SCALE)
+
+    if lora_weights_path:
+        print(f"Loading LoRA weights from {lora_weights_path}...")
+        pipe.load_lora_weights(lora_weights_path, weight_name="pytorch_lora_weights.safetensors")
+        pipe.fuse_lora(lora_scale=0.8)
+        print("LoRA fused into pipeline.")
 
     return yolo_model, pipe
 
@@ -253,6 +259,7 @@ def main():
     parser.add_argument("--reference_image", required=True, help="Path to reference character image")
     parser.add_argument("--output_video", default="output_final.mp4", help="Path for output video")
     parser.add_argument("--max_frames", type=int, default=0, help="Stop after N frames (0 = all)")
+    parser.add_argument("--lora_weights", default=None, help="Path to trained LoRA weights directory (optional)")
     args = parser.parse_args()
 
     if not os.path.isfile(args.input_video):
@@ -260,7 +267,7 @@ def main():
     if not os.path.isfile(args.reference_image):
         raise FileNotFoundError(f"Reference image not found: {args.reference_image}")
 
-    yolo_model, sd_pipe = load_models()
+    yolo_model, sd_pipe = load_models(lora_weights_path=args.lora_weights)
 
     cap, width, height, fps, total_frames = open_video(args.input_video)
     ref_image = Image.open(args.reference_image).convert("RGB").resize(CONTROLNET_SIZE)

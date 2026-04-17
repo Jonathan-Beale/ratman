@@ -34,13 +34,47 @@ python3 ratman_pipeline.py \
 |---|---|---|
 | `--output_video` | `output_final.mp4` | Output file path |
 | `--max_frames` | `0` (all) | Stop after N frames — useful for quick tests |
+| `--lora_weights` | None | Path to trained LoRA weights directory |
 
 ### Quick test (3 frames)
 ```bash
 python3 ratman_pipeline.py --input_video input.mp4 --reference_image superhero.png --output_video test.mp4 --max_frames 3
 ```
 
+### With LoRA weights
+```bash
+python3 ratman_pipeline.py --input_video input.mp4 --reference_image superhero.png --lora_weights lora_weights/ --output_video output.mp4
+```
+
 ## Output
 
 - Individual frames saved to `output/frame_XXXX.png`
 - Final assembled video at the path given by `--output_video`
+
+## LoRA Fine-Tuning (optional — improves character consistency)
+
+LoRA fine-tunes the model on your specific character so it generates them more reliably across frames.
+
+### 1. Collect training images
+Add 15-20 Batman images to `training_data/` — see `training_data/README.md` for guidance.
+
+### 2. Run training (~3-6 hours on GPU)
+```bash
+python3 lora_train.py --instance_data_dir training_data/ --output_dir lora_weights/
+```
+
+Key options:
+| Flag | Default | Description |
+|---|---|---|
+| `--num_train_steps` | `1000` | More steps = better quality (try 800-1500) |
+| `--rank` | `8` | LoRA rank — higher = more expressive (8-16 recommended) |
+| `--instance_prompt` | `batman, dark superhero suit...` | Caption applied to all training images |
+
+### 3. Run pipeline with trained LoRA
+```bash
+python3 ratman_pipeline.py \
+  --input_video input.mp4 \
+  --reference_image superhero.png \
+  --lora_weights lora_weights/ \
+  --output_video output_lora.mp4
+```

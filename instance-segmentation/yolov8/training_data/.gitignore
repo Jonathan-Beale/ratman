@@ -1,0 +1,6 @@
+# Exclude training images — keep them local, not in the repo
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.bmp
