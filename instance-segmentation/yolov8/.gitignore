@@ -1,0 +1,30 @@
+# model weights
+*.pt
+*.pth
+*.weights
+*.onnx
+*.bin
+models/
+
+# virtual environment
+venv/
+
+# python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# output frames and videos (large generated files)
+output/*.png
+output/*.jpg
+output/*.mp4
+output/*.mov
+densepose_prep/*.mp4
+densepose_prep/*.mov
+input/*.mp4
+input/*.mov
+
+# misc
+.DS_Store
+gradio_cached_examples/
+=*
