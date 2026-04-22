@@ -6,17 +6,10 @@ Pose extraction + rendering for ControlNet OpenPose conditioning.
 This version produces ControlNet-compatible OpenPose pose maps using:
   controlnet_aux.OpenposeDetector
 
-It ALSO keeps the MediaPipe Tasks PoseLandmarker JSON output (poses.json) for debugging,
-but the ControlNet conditioning frames come from OpenposeDetector (not from our own
-skeleton rendering).
-
-Install:
-  pip install -U controlnet-aux
-
 Files produced (per pose video cache):
   frames/frame_000000.png ...
-  poses/pose_000000.png ...    <-- OpenPose maps used by ControlNet
-  poses.json                  <-- MediaPipe landmarks debug output
+  OpenPose maps: poses/pose_000000.png ...
+  old MediaPipe debug output: poses.json
 """
 
 from __future__ import annotations
