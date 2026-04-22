@@ -64,3 +64,8 @@ yolox*
 */assets/
 DataGen/Assets/
 *.db
+
+# Ethans additions
+*.safetensors
+/marvels_dungeons_diffusers
+*.pt
