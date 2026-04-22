@@ -69,3 +69,6 @@ DataGen/Assets/
 *.safetensors
 /marvels_dungeons_diffusers
 *.pt
+*.png
+*.jpg
+*.mp4
