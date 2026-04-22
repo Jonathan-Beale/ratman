@@ -67,7 +67,7 @@ DataGen/Assets/
 
 # Ethans additions
 *.safetensors
-/marvels_dungeons_diffusers
+**/marvels_dungeons_diffusers
 *.pt
 *.png
 *.jpg
