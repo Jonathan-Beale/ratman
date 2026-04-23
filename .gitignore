@@ -55,10 +55,16 @@ exp_output/
 **/output_videos/
 
 # models
+pretrained_weights/
 */pretrained_weights/
 pose_guider*
 yolox*
 */configs/
+
+# logs and temp files
+*.log
+*.tmp
+*.task
 
 # assets
 */assets/
