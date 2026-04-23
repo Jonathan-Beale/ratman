@@ -115,11 +115,9 @@ def read_frames(video_path):
     frames = []
     for packet in container.demux(video_stream):
         for frame in packet.decode():
-            image = Image.frombytes(
-                "RGB",
-                (frame.width, frame.height),
-                frame.to_rgb().to_ndarray(),
-            )
+            # Newer PyAV versions can return non-contiguous arrays; PIL expects contiguous buffers.
+            frame_rgb = np.ascontiguousarray(frame.to_rgb().to_ndarray())
+            image = Image.fromarray(frame_rgb, mode="RGB")
             frames.append(image)
 
     return frames
