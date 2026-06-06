@@ -235,8 +235,12 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
         let icon_key = ALL_CHAMPIONS.iter().copied()
             .find(|&c| name_slug(c) == name_slug(ddragon_key(&change.patch)));
         let icon = NativeRenderer::element("div");
-        NativeRenderer::set_attr(&icon, "data-w",      &ICON_SZ.to_string());
-        NativeRenderer::set_attr(&icon, "data-height", &ICON_SZ.to_string());
+        NativeRenderer::set_attr(&icon, "data-w",             &ICON_SZ.to_string());
+        NativeRenderer::set_attr(&icon, "data-height",        &ICON_SZ.to_string());
+        NativeRenderer::set_attr(&icon, "data-border-top",    &format!("{}:2", badge_color));
+        NativeRenderer::set_attr(&icon, "data-border-left",   &format!("{}:2", badge_color));
+        NativeRenderer::set_attr(&icon, "data-border-bottom", &format!("{}:2", badge_color));
+        NativeRenderer::set_attr(&icon, "data-border-right",  &format!("{}:2", badge_color));
         if let Some(key) = icon_key {
             NativeRenderer::set_attr(&icon, "data-image", &format!("assets/champion_icons/{key}.png"));
         } else {
@@ -254,13 +258,22 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
     NativeRenderer::set_attr(&col, "data-flex",   "1.0");
     NativeRenderer::append(&row, &col);
 
-    // Pill first (fixed 65px) so name fills remaining — keeps them adjacent.
-    // In brick row layout: unclaimed children share remaining_flex equally.
-    // With pill having data-w=65 (fixed), name_t (no data-w) gets 1.0 * (row_w - 65).
+    // name_t uses a fixed data-w so the pill can follow immediately to its right.
+    // Without data-w, brick row layout treats name_t as an "unclaimed" flex child
+    // and gives it all remaining space, pushing the pill to the far right edge.
+    // 260px covers the longest LoL entity names (e.g. "Grasp of the Undying").
     let name_row = NativeRenderer::element("div");
     NativeRenderer::set_attr(&name_row, "data-layout", "row");
     NativeRenderer::set_attr(&name_row, "data-height", "36");
     NativeRenderer::append(&col, &name_row);
+
+    let name_t = NativeRenderer::text(&change.patch);
+    NativeRenderer::set_attr(&name_t, "data-color",       theme.text);
+    NativeRenderer::set_attr(&name_t, "data-text-size",   "20");
+    NativeRenderer::set_attr(&name_t, "data-text-weight", "bold");
+    NativeRenderer::set_attr(&name_t, "data-height",      "36");
+    NativeRenderer::set_attr(&name_t, "data-w",           "260");
+    NativeRenderer::append(&name_row, &name_t);
 
     if !badge_label.is_empty() {
         let pill = NativeRenderer::text(badge_label);
@@ -271,13 +284,6 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
         NativeRenderer::set_attr(&pill, "data-w",           "65");
         NativeRenderer::append(&name_row, &pill);
     }
-
-    let name_t = NativeRenderer::text(&change.patch);
-    NativeRenderer::set_attr(&name_t, "data-color",       theme.text);
-    NativeRenderer::set_attr(&name_t, "data-text-size",   "20");
-    NativeRenderer::set_attr(&name_t, "data-text-weight", "bold");
-    NativeRenderer::set_attr(&name_t, "data-height",      "36");
-    NativeRenderer::append(&name_row, &name_t);
 
     for line in &summary_lines {
         let lt = NativeRenderer::text(line);
