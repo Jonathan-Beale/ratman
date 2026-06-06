@@ -162,6 +162,116 @@ fn is_patch_system_entry(name: &str) -> bool {
     SYSTEM_TERMS.iter().any(|&t| name.to_ascii_lowercase().contains(&t.to_ascii_lowercase()))
 }
 
+fn item_icon_id(name: &str) -> Option<u32> {
+    Some(match name_slug(name).as_str() {
+        // Starters
+        "doransshield"          => 1054,
+        "doransblade"           => 1055,
+        "doransring"            => 1056,
+        // Boots
+        "berserkersgreaves"     => 3006,
+        "bootsofswiftness"      => 3009,
+        "sorcerersshoes"        => 3020,
+        "platedsteelcaps"       => 3047,
+        "mercurystreads"        => 3111,
+        "mobilityboots"         => 3117,
+        // Completed items — alphabetical
+        "abyssalmask"           => 3001,
+        "anathemaschain"        => 3330,
+        "archangelsstaff"       => 3003,
+        "banshesveil"           => 3102,
+        "blackcleaver"          => 3071,
+        "bloodthirster"         => 3072,
+        "cosmicdrive"           => 4629,
+        "cryptbloom"            => 6667,
+        "deadmansplate"         => 3742,
+        "deathsdance"           => 6333,
+        "demonicembrace"        => 4637,
+        "divinesunderer"        => 4005,
+        "edgeofnight"           => 3814,
+        "everfrost"             => 6656,
+        "fimbulwinter"          => 3119,
+        "forceofnature"         => 4401,
+        "galeforce"             => 6671,
+        "gargoylestoneplate"    => 3193,
+        "goredrinker"           => 6630,
+        "grailofthe undying"    => 3003,
+        "graspoftheundying"     => 3437,
+        "heartsteel"            => 6664,
+        "horizonfocus"          => 4628,
+        "hextechrocketbelt"     => 3152,
+        "immortalshieldbow"     => 6673,
+        "infinityedge"          => 3031,
+        "jakshotheprotean"      => 6665,
+        "knightsvow"            => 3109,
+        "krakenslayer"          => 6672,
+        "liandryanguish"        => 6652,
+        "liandrysheart"         => 6652,
+        "liandrystorment"       => 6652,
+        "locketoftheironsola"   | "locketoftheironsolar" | "locketoftheironsolarilol" | "locketoftheironsolar" => 3190,
+        "ludenstempest"         => 6655,
+        "malignance"            => 6699,
+        "mawofmalmortius"       => 3156,
+        "mercurialscimitar"     => 3139,
+        "moonstone"             | "moonstonerenewer" => 6617,
+        "morellonomicon"        => 3165,
+        "nashorstooth"          => 3115,
+        "navoriquickblades"     | "navoriflickerblade" => 6692,
+        "opportunity"           => 6701,
+        "prowlersclaw"          => 6693,
+        "rabadonsdeathcap"      => 3089,
+        "randuin"               | "randuinsomen" => 3143,
+        "ravenoushydra"         => 3074,
+        "riftmaker"             => 4633,
+        "rodofages"             => 6657,
+        "runaanshurricane"      => 3085,
+        "rapidfirecannon"       => 3094,
+        "rylais"                | "rylaiscrystalscepter" => 3116,
+        "serpentsfang"          => 6035,
+        "seryldasgrudge"        => 6694,
+        "shadowflame"           => 4645,
+        "sheen"                 => 3057,
+        "shurelyas"             | "shurelyasbattlesong" => 2065,
+        "staffofflowingwater"   => 3853,
+        "steraksgage"           => 3053,
+        "stormsurge"            => 4646,
+        "stormrazor"            => 3095,
+        "stridebreaker"         => 6631,
+        "sunderedsky"           => 6670,
+        "sunfireaegis"          => 4630,
+        "thecollector"          => 6676,
+        "thornmail"             => 3075,
+        "titanichydra"          => 3748,
+        "trinityforce"          => 3078,
+        "turbochemtank"         => 6662,
+        "umbralglaive"          => 3179,
+        "voidstaff"             => 3135,
+        "warmogsarmor"          => 3083,
+        "witsend"               => 3091,
+        "zhonyashourglass"      => 3157,
+        _ => return None,
+    })
+}
+
+fn perk_icon_id(name: &str) -> Option<u32> {
+    let slug = name_slug(name);
+    for &id in &[
+        8005, 8008, 8009, 8010, 8014, 8017, 8021, 8105, 8106, 8112, 8126,
+        8128, 8135, 8137, 8139, 8140, 8141, 8143, 8210, 8214, 8224, 8226,
+        8229, 8230, 8232, 8233, 8234, 8236, 8237, 8242, 8275, 8299, 8304,
+        8306, 8313, 8316, 8321, 8345, 8347, 8351, 8352, 8360, 8369, 8401,
+        8410, 8429, 8437, 8439, 8444, 8446, 8451, 8453, 8463, 8465, 8473,
+        9101, 9103, 9104, 9105, 9111, 9923,
+        5001, 5002, 5003, 5005, 5007, 5008,
+    ] {
+        if name_slug(perk_name(id)) == slug { return Some(id); }
+    }
+    None
+}
+
+#[derive(Clone, Copy, Debug)]
+enum EntryIconStyle { None, Champion, Item, Rune }
+
 fn patch_overview_row(
     label:   &str,
     total:   usize,
@@ -202,7 +312,7 @@ fn patch_overview_row(
     NativeRenderer::append(&row, &nrf_t);
 }
 
-fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent: &NativeNode) {
+fn patch_entry_row(change: &PatchChange, icon_style: EntryIconStyle, theme: &Theme, parent: &NativeNode) {
     let cls = patch_change_class(&change.summary);
     let badge_color = match cls {
         PatchClass::Buff    => "#4caf6e",
@@ -210,8 +320,8 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
         PatchClass::Neutral => "#888899",
     };
     let badge_label = match cls {
-        PatchClass::Buff    => "▲ BUFF",
-        PatchClass::Nerf    => "▼ NERF",
+        PatchClass::Buff    => "  ▲ BUFF",
+        PatchClass::Nerf    => "  ▼ NERF",
         PatchClass::Neutral => "",
     };
 
@@ -221,7 +331,6 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
         .filter(|l| !l.is_empty())
         .collect();
 
-    // Colored left border = the progression spine node; no hover-fill per design.
     let row = NativeRenderer::element("div");
     NativeRenderer::set_attr(&row, "data-layout",        "row");
     NativeRenderer::set_attr(&row, "data-fill",          "transparent");
@@ -230,21 +339,36 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
     NativeRenderer::set_attr(&row, "data-pad",           "10 16 10 14");
     NativeRenderer::append(parent, &row);
 
-    if show_icon {
-        const ICON_SZ: u32 = 96;
-        let icon_key = ALL_CHAMPIONS.iter().copied()
-            .find(|&c| name_slug(c) == name_slug(ddragon_key(&change.patch)));
+    let icon_sz: u32 = match icon_style {
+        EntryIconStyle::Champion => 96,
+        EntryIconStyle::Item | EntryIconStyle::Rune => 48,
+        EntryIconStyle::None => 0,
+    };
+    if icon_sz > 0 {
+        let icon_path: Option<String> = match icon_style {
+            EntryIconStyle::Champion => {
+                ALL_CHAMPIONS.iter().copied()
+                    .find(|&c| name_slug(c) == name_slug(ddragon_key(&change.patch)))
+                    .map(|key| format!("assets/champion_icons/{key}.png"))
+            }
+            EntryIconStyle::Item => {
+                item_icon_id(&change.patch).map(|id| format!("assets/item_icons/{id}.png"))
+            }
+            EntryIconStyle::Rune => {
+                perk_icon_id(&change.patch).map(|id| format!("assets/rune_icons/{id}.png"))
+            }
+            EntryIconStyle::None => None,
+        };
         let icon = NativeRenderer::element("div");
-        NativeRenderer::set_attr(&icon, "data-w",             &ICON_SZ.to_string());
-        NativeRenderer::set_attr(&icon, "data-height",        &ICON_SZ.to_string());
+        NativeRenderer::set_attr(&icon, "data-w",             &icon_sz.to_string());
+        NativeRenderer::set_attr(&icon, "data-height",        &icon_sz.to_string());
         NativeRenderer::set_attr(&icon, "data-border-top",    &format!("{}:2", badge_color));
         NativeRenderer::set_attr(&icon, "data-border-left",   &format!("{}:2", badge_color));
         NativeRenderer::set_attr(&icon, "data-border-bottom", &format!("{}:2", badge_color));
         NativeRenderer::set_attr(&icon, "data-border-right",  &format!("{}:2", badge_color));
-        if let Some(key) = icon_key {
-            NativeRenderer::set_attr(&icon, "data-image", &format!("assets/champion_icons/{key}.png"));
-        } else {
-            NativeRenderer::set_attr(&icon, "data-fill", badge_color);
+        match icon_path {
+            Some(p) => NativeRenderer::set_attr(&icon, "data-image", &p),
+            None    => NativeRenderer::set_attr(&icon, "data-fill",  badge_color),
         }
         NativeRenderer::append(&row, &icon);
         let gap = NativeRenderer::element("div");
@@ -258,32 +382,17 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
     NativeRenderer::set_attr(&col, "data-flex",   "1.0");
     NativeRenderer::append(&row, &col);
 
-    // name_t uses a fixed data-w so the pill can follow immediately to its right.
-    // Without data-w, brick row layout treats name_t as an "unclaimed" flex child
-    // and gives it all remaining space, pushing the pill to the far right edge.
-    // 260px covers the longest LoL entity names (e.g. "Grasp of the Undying").
-    let name_row = NativeRenderer::element("div");
-    NativeRenderer::set_attr(&name_row, "data-layout", "row");
-    NativeRenderer::set_attr(&name_row, "data-height", "36");
-    NativeRenderer::append(&col, &name_row);
-
-    let name_t = NativeRenderer::text(&change.patch);
-    NativeRenderer::set_attr(&name_t, "data-color",       theme.text);
+    // Combine name + badge into one text node so they are truly adjacent —
+    // separate nodes require a fixed data-w on the name, which leaves a gap
+    // for short names. Combined text fills the row naturally with no gap.
+    let display  = format!("{}{}", change.patch, badge_label);
+    let name_col = if badge_label.is_empty() { theme.text } else { badge_color };
+    let name_t   = NativeRenderer::text(&display);
+    NativeRenderer::set_attr(&name_t, "data-color",       name_col);
     NativeRenderer::set_attr(&name_t, "data-text-size",   "20");
     NativeRenderer::set_attr(&name_t, "data-text-weight", "bold");
     NativeRenderer::set_attr(&name_t, "data-height",      "36");
-    NativeRenderer::set_attr(&name_t, "data-w",           "260");
-    NativeRenderer::append(&name_row, &name_t);
-
-    if !badge_label.is_empty() {
-        let pill = NativeRenderer::text(badge_label);
-        NativeRenderer::set_attr(&pill, "data-color",       badge_color);
-        NativeRenderer::set_attr(&pill, "data-text-size",   "13");
-        NativeRenderer::set_attr(&pill, "data-text-weight", "bold");
-        NativeRenderer::set_attr(&pill, "data-height",      "36");
-        NativeRenderer::set_attr(&pill, "data-w",           "65");
-        NativeRenderer::append(&name_row, &pill);
-    }
+    NativeRenderer::append(&col, &name_t);
 
     for line in &summary_lines {
         let lt = NativeRenderer::text(line);
@@ -493,9 +602,24 @@ pub fn spawn_fetch_worker(
                     FetchCmd::GlobalNotes => {
                         if let Ok(mut s) = state_arc.lock() { s.global_loading = true; }
                         let grouped = rt.block_on(rec.fetch_all_changes_grouped());
+                        // Collect item IDs from patch changes so their icons are cached.
+                        let patch_item_ids: Vec<u32> = grouped.iter()
+                            .flat_map(|(_, changes)| changes.iter())
+                            .filter_map(|c| item_icon_id(&c.patch))
+                            .collect::<std::collections::HashSet<_>>()
+                            .into_iter()
+                            .collect();
                         if let Ok(mut s) = state_arc.lock() {
                             s.global_patches = grouped;
                             s.global_loading  = false;
+                        }
+                        if !patch_item_ids.is_empty() {
+                            let assets_dir = std::env::current_exe()
+                                .ok()
+                                .and_then(|p| p.parent().map(|d| d.join("assets")))
+                                .unwrap_or_else(|| std::path::PathBuf::from("assets"));
+                            let dd = cathedral_rift::DataDragonClient::new();
+                            let _ = rt.block_on(dd.download_item_icons(&assets_dir, &patch_item_ids));
                         }
                     }
                     FetchCmd::All(champion) => {
@@ -1668,8 +1792,11 @@ fn rune_tree_column(
         let font_sz: u32 = if is_keystone { 24 } else { 18 };
         let desc_sz: u32 = if is_keystone { 15 } else { 13 };
         let desc = perk_desc(id);
-        let name_h:   u32 = font_sz + 4;
-        let desc_h:   u32 = if desc.is_empty() { 0 } else { desc_sz + 4 };
+        let name_h:  u32 = font_sz + 4;
+        let avail_text_w = col_w.saturating_sub(spine_zone_w + gap_w + 16);
+        let desc_h:  u32 = if desc.is_empty() { 0 } else {
+            NativeRenderer::measure_text(desc, avail_text_w, desc_sz as f32)
+        };
         let desc_gap: u32 = if desc.is_empty() { 0 } else { 6 };
         let block_h  = name_h + desc_gap + desc_h;
         let top_pad  = icon_sz.saturating_sub(block_h) / 2 + v_pad;
@@ -2271,7 +2398,7 @@ fn patch_notes_tab(
 ) {
     const PATCH_SIDEBAR_W: u32 = 220;
     const SIDEBAR_HDR_H:   u32 = 52;
-    const TAB_BAR_H:       u32 = 52;
+    const TAB_BAR_H:       u32 = 72;
     const OVERVIEW_H:      u32 = 220;
     let content_w = main_w.saturating_sub(PATCH_SIDEBAR_W);
 
@@ -2330,9 +2457,9 @@ fn patch_notes_tab(
                 NativeRenderer::set_attr(&ver_btn, "data-fill",        if is_sel { theme.surface_hi } else { "transparent" });
                 NativeRenderer::set_attr(&ver_btn, "data-hover-fill",  theme.surface_hi);
                 NativeRenderer::set_attr(&ver_btn, "data-pad",         "0 0 0 20");
-                if is_sel {
-                    NativeRenderer::set_attr(&ver_btn, "data-border-left", &format!("{}:4", theme.accent));
-                }
+                // Always show left border — thick accent for selected, thin divider for others.
+                NativeRenderer::set_attr(&ver_btn, "data-border-left",
+                    &if is_sel { format!("{}:4", theme.accent) } else { format!("{}:2", theme.divider) });
                 let pv = patch_ver.clone();
                 let sa = state_arc.clone();
                 NativeRenderer::on_event(&ver_btn, "click", Box::new(move |_: BrickEvent| {
@@ -2462,10 +2589,10 @@ fn patch_notes_tab(
                 let lbl_btn = NativeRenderer::element("div");
                 NativeRenderer::set_attr(&lbl_btn, "data-layout",      "row");
                 NativeRenderer::set_attr(&lbl_btn, "data-height",      &TAB_BAR_H.to_string());
-                NativeRenderer::set_attr(&lbl_btn, "data-w",           "155");
+                NativeRenderer::set_attr(&lbl_btn, "data-w",           "190");
                 NativeRenderer::set_attr(&lbl_btn, "data-fill",        if is_active { theme.surface_hi } else { "transparent" });
                 NativeRenderer::set_attr(&lbl_btn, "data-hover-fill",  theme.surface_hi);
-                NativeRenderer::set_attr(&lbl_btn, "data-pad",         "0 0 0 16");
+                NativeRenderer::set_attr(&lbl_btn, "data-pad",         "0 0 0 20");
                 if is_active {
                     NativeRenderer::set_attr(&lbl_btn, "data-border-bottom", &format!("{}:3", theme.accent));
                 }
@@ -2475,7 +2602,7 @@ fn patch_notes_tab(
                 }));
                 let lbl = NativeRenderer::text(&format!("{label}  {count}"));
                 NativeRenderer::set_attr(&lbl, "data-color",       if is_active { theme.text } else { theme.muted });
-                NativeRenderer::set_attr(&lbl, "data-text-size",   "16");
+                NativeRenderer::set_attr(&lbl, "data-text-size",   "18");
                 NativeRenderer::set_attr(&lbl, "data-text-weight", "bold");
                 NativeRenderer::set_attr(&lbl, "data-height",      &TAB_BAR_H.to_string());
                 NativeRenderer::append(&lbl_btn, &lbl);
@@ -2505,9 +2632,14 @@ fn patch_notes_tab(
                 NativeRenderer::set_attr(&none_t, "data-pad",       "0 0 0 24");
                 NativeRenderer::append(&scroll, &none_t);
             } else {
-                let show_icon = state.patch_detail_tab == PatchDetailTab::Champions;
+                let icon_style = match state.patch_detail_tab {
+                    PatchDetailTab::Champions => EntryIconStyle::Champion,
+                    PatchDetailTab::Items     => EntryIconStyle::Item,
+                    PatchDetailTab::Runes     => EntryIconStyle::Rune,
+                    PatchDetailTab::System    => EntryIconStyle::None,
+                };
                 for change in active {
-                    patch_entry_row(change, show_icon, theme, &scroll);
+                    patch_entry_row(change, icon_style, theme, &scroll);
                 }
             }
         } else {
