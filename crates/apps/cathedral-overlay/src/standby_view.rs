@@ -340,8 +340,7 @@ fn patch_entry_row(change: &PatchChange, icon_style: EntryIconStyle, theme: &The
     NativeRenderer::append(parent, &row);
 
     let icon_sz: u32 = match icon_style {
-        EntryIconStyle::Champion => 96,
-        EntryIconStyle::Item | EntryIconStyle::Rune => 48,
+        EntryIconStyle::Champion | EntryIconStyle::Item | EntryIconStyle::Rune => 128,
         EntryIconStyle::None => 0,
     };
     if icon_sz > 0 {
@@ -956,7 +955,8 @@ fn main_panel(
     NativeRenderer::set_attr(&p, "data-layout", "column");
 
     const BOTTOM_H: u32 = 110;
-    let tab_h = body_h.saturating_sub(BOTTOM_H);
+    let show_bottom = state.active_tab == Tab::Runes;
+    let tab_h = if show_bottom { body_h.saturating_sub(BOTTOM_H) } else { body_h };
 
     let tab_area = NativeRenderer::element("div");
     NativeRenderer::set_attr(&tab_area, "data-layout", "column");
@@ -972,8 +972,9 @@ fn main_panel(
         Tab::Status     => status_tab(state, theme, &tab_area),
     }
 
-    // Bottom bar: always-visible caret to bring up champion select
-    champ_select_bar(state, state_arc, theme, &p, main_w, BOTTOM_H);
+    if show_bottom {
+        champ_select_bar(state, state_arc, theme, &p, main_w, BOTTOM_H);
+    }
 
     p
 }
@@ -2060,26 +2061,58 @@ fn build_preview(
             NativeRenderer::append(&secondary_col, &shdr);
 
             const SHARD_LABELS: [&str; 3] = ["Offense", "Flex", "Defense"];
+            const SHARD_ROW_H:  u32 = 52;
+            const SHARD_ICON_SZ: u32 = 36;
+            let icon_top = (SHARD_ROW_H - SHARD_ICON_SZ) / 2; // 8 — centers 36px in 52px
+            let lbl_top  = (SHARD_ROW_H - 15) / 2;            // centers 13px text
+            let stat_top = (SHARD_ROW_H - 16) / 2;            // centers 14px text
+
             for (si, &id) in perks[6..9].iter().enumerate() {
-                let shard_row = hrow(44);
+                let shard_row = hrow(SHARD_ROW_H);
                 NativeRenderer::set_attr(&shard_row, "data-pad",        "0 0 0 20");
                 NativeRenderer::set_attr(&shard_row, "data-border-left",&format!("{}:1", theme.divider));
 
+                // Label — column + spacer so text is vertically centered on the icon
+                let lbl_col = NativeRenderer::element("div");
+                NativeRenderer::set_attr(&lbl_col, "data-layout", "column");
+                NativeRenderer::set_attr(&lbl_col, "data-w",      "80");
+                NativeRenderer::set_attr(&lbl_col, "data-height", &SHARD_ROW_H.to_string());
+                spacer(lbl_top, &lbl_col);
                 let lbl = NativeRenderer::text(SHARD_LABELS[si]);
                 NativeRenderer::set_attr(&lbl, "data-color",     theme.muted);
                 NativeRenderer::set_attr(&lbl, "data-text-size", "13");
-                NativeRenderer::set_attr(&lbl, "data-h",         "44");
-                NativeRenderer::set_attr(&lbl, "data-w",         "80");
-                NativeRenderer::append(&shard_row, &lbl);
+                NativeRenderer::append(&lbl_col, &lbl);
+                NativeRenderer::append(&shard_row, &lbl_col);
 
+                // Icon — column + spacer so 36px image is vertically centered in 52px row
+                let icon_col = NativeRenderer::element("div");
+                NativeRenderer::set_attr(&icon_col, "data-layout", "column");
+                NativeRenderer::set_attr(&icon_col, "data-height", &SHARD_ROW_H.to_string());
+                spacer(icon_top, &icon_col);
+                let icon = NativeRenderer::element("div");
+                NativeRenderer::set_attr(&icon, "data-w",      &SHARD_ICON_SZ.to_string());
+                NativeRenderer::set_attr(&icon, "data-height", &SHARD_ICON_SZ.to_string());
+                NativeRenderer::set_attr(&icon, "data-image",  &format!("assets/rune_icons/{id}.png"));
+                NativeRenderer::set_attr(&icon, "data-fill",   theme.surface_hi);
+                NativeRenderer::append(&icon_col, &icon);
+                NativeRenderer::append(&shard_row, &icon_col);
+
+                // Stat text — column + spacer so text center aligns with icon center
                 let stat = perk_name(id);
-                let stat_text = if stat.is_empty() { format!("#{id}") } else { stat.to_string() };
-                let stat_lbl = NativeRenderer::text(&stat_text);
-                NativeRenderer::set_attr(&stat_lbl, "data-color",       theme.accent2);
-                NativeRenderer::set_attr(&stat_lbl, "data-text-size",   "14");
-                NativeRenderer::set_attr(&stat_lbl, "data-text-weight", "bold");
-                NativeRenderer::set_attr(&stat_lbl, "data-h",           "44");
-                NativeRenderer::append(&shard_row, &stat_lbl);
+                if !stat.is_empty() {
+                    let g = NativeRenderer::element("div");
+                    NativeRenderer::set_attr(&g, "data-w", "10");
+                    NativeRenderer::append(&shard_row, &g);
+                    let stat_col = NativeRenderer::element("div");
+                    NativeRenderer::set_attr(&stat_col, "data-layout", "column");
+                    NativeRenderer::set_attr(&stat_col, "data-height", &SHARD_ROW_H.to_string());
+                    spacer(stat_top, &stat_col);
+                    let stat_lbl = NativeRenderer::text(stat);
+                    NativeRenderer::set_attr(&stat_lbl, "data-color",     theme.accent2);
+                    NativeRenderer::set_attr(&stat_lbl, "data-text-size", "14");
+                    NativeRenderer::append(&stat_col, &stat_lbl);
+                    NativeRenderer::append(&shard_row, &stat_col);
+                }
 
                 NativeRenderer::append(&secondary_col, &shard_row);
                 if si < 2 {
@@ -2438,6 +2471,7 @@ fn patch_notes_tab(
         NativeRenderer::set_attr(&list, "data-scroll-y",  "true");
         NativeRenderer::set_attr(&list, "data-scroll-id", "patch-sidebar-scroll");
         NativeRenderer::set_attr(&list, "data-height",    &list_h.to_string());
+        NativeRenderer::set_attr(&list, "data-pad",       "0 0 0 8");
         NativeRenderer::append(&sidebar, &list);
 
         if state.global_patches.is_empty() {
@@ -2478,6 +2512,8 @@ fn patch_notes_tab(
                 NativeRenderer::set_attr(&ct_btn, "data-fill",       if is_sel { theme.surface_hi } else { "transparent" });
                 NativeRenderer::set_attr(&ct_btn, "data-hover-fill", theme.surface_hi);
                 NativeRenderer::set_attr(&ct_btn, "data-pad",        "0 0 0 20");
+                NativeRenderer::set_attr(&ct_btn, "data-border-left",
+                    &if is_sel { format!("{}:4", theme.accent) } else { format!("{}:2", theme.divider) });
                 let pv2 = patch_ver.clone();
                 let sa2 = state_arc.clone();
                 NativeRenderer::on_event(&ct_btn, "click", Box::new(move |_: BrickEvent| {
@@ -2490,7 +2526,12 @@ fn patch_notes_tab(
                 NativeRenderer::append(&ct_btn, &ct);
                 NativeRenderer::append(&list, &ct_btn);
 
-                spacer(8, &list);
+                // Gap between entries — carries the spine border for visual continuity.
+                let gap_div = NativeRenderer::element("div");
+                NativeRenderer::set_attr(&gap_div, "data-height",    "12");
+                NativeRenderer::set_attr(&gap_div, "data-border-left",
+                    &format!("{}:2", theme.divider));
+                NativeRenderer::append(&list, &gap_div);
             }
         }
     }
@@ -2592,7 +2633,6 @@ fn patch_notes_tab(
                 NativeRenderer::set_attr(&lbl_btn, "data-w",           "190");
                 NativeRenderer::set_attr(&lbl_btn, "data-fill",        if is_active { theme.surface_hi } else { "transparent" });
                 NativeRenderer::set_attr(&lbl_btn, "data-hover-fill",  theme.surface_hi);
-                NativeRenderer::set_attr(&lbl_btn, "data-pad",         "0 0 0 20");
                 if is_active {
                     NativeRenderer::set_attr(&lbl_btn, "data-border-bottom", &format!("{}:3", theme.accent));
                 }
@@ -2605,6 +2645,7 @@ fn patch_notes_tab(
                 NativeRenderer::set_attr(&lbl, "data-text-size",   "18");
                 NativeRenderer::set_attr(&lbl, "data-text-weight", "bold");
                 NativeRenderer::set_attr(&lbl, "data-height",      &TAB_BAR_H.to_string());
+                NativeRenderer::set_attr(&lbl, "data-align",       "center");
                 NativeRenderer::append(&lbl_btn, &lbl);
                 NativeRenderer::append(&tab_bar, &lbl_btn);
             }
