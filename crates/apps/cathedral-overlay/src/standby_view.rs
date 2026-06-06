@@ -231,7 +231,7 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
     NativeRenderer::append(parent, &row);
 
     if show_icon {
-        const ICON_SZ: u32 = 48;
+        const ICON_SZ: u32 = 96;
         let icon_key = ALL_CHAMPIONS.iter().copied()
             .find(|&c| name_slug(c) == name_slug(ddragon_key(&change.patch)));
         let icon = NativeRenderer::element("div");
@@ -244,7 +244,7 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
         }
         NativeRenderer::append(&row, &icon);
         let gap = NativeRenderer::element("div");
-        NativeRenderer::set_attr(&gap, "data-w",      "10");
+        NativeRenderer::set_attr(&gap, "data-w",      "14");
         NativeRenderer::set_attr(&gap, "data-height", "1");
         NativeRenderer::append(&row, &gap);
     }
@@ -254,28 +254,30 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
     NativeRenderer::set_attr(&col, "data-flex",   "1.0");
     NativeRenderer::append(&row, &col);
 
-    // Name + BUFF/NERF pill on the same line
+    // Pill first (fixed 65px) so name fills remaining — keeps them adjacent.
+    // In brick row layout: unclaimed children share remaining_flex equally.
+    // With pill having data-w=65 (fixed), name_t (no data-w) gets 1.0 * (row_w - 65).
     let name_row = NativeRenderer::element("div");
     NativeRenderer::set_attr(&name_row, "data-layout", "row");
-    NativeRenderer::set_attr(&name_row, "data-height", "30");
+    NativeRenderer::set_attr(&name_row, "data-height", "36");
     NativeRenderer::append(&col, &name_row);
-
-    let name_t = NativeRenderer::text(&change.patch);
-    NativeRenderer::set_attr(&name_t, "data-color",       theme.text);
-    NativeRenderer::set_attr(&name_t, "data-text-size",   "20");
-    NativeRenderer::set_attr(&name_t, "data-text-weight", "bold");
-    NativeRenderer::set_attr(&name_t, "data-height",      "30");
-    NativeRenderer::append(&name_row, &name_t);
 
     if !badge_label.is_empty() {
         let pill = NativeRenderer::text(badge_label);
         NativeRenderer::set_attr(&pill, "data-color",       badge_color);
         NativeRenderer::set_attr(&pill, "data-text-size",   "13");
         NativeRenderer::set_attr(&pill, "data-text-weight", "bold");
-        NativeRenderer::set_attr(&pill, "data-height",      "30");
+        NativeRenderer::set_attr(&pill, "data-height",      "36");
         NativeRenderer::set_attr(&pill, "data-w",           "65");
         NativeRenderer::append(&name_row, &pill);
     }
+
+    let name_t = NativeRenderer::text(&change.patch);
+    NativeRenderer::set_attr(&name_t, "data-color",       theme.text);
+    NativeRenderer::set_attr(&name_t, "data-text-size",   "20");
+    NativeRenderer::set_attr(&name_t, "data-text-weight", "bold");
+    NativeRenderer::set_attr(&name_t, "data-height",      "36");
+    NativeRenderer::append(&name_row, &name_t);
 
     for line in &summary_lines {
         let lt = NativeRenderer::text(line);
@@ -1622,17 +1624,23 @@ fn rune_tree_column(
         let slot = hrow(row_h);
         NativeRenderer::set_attr(&slot, "data-fill", theme.surface);
 
-        // ── Spine zone: fixed-width, centers the icon horizontally ──────────
+        // ── Spine zone: column so the icon sits at v_pad from the top, making
+        //    its vertical center equal to slot.y + v_pad + icon_sz/2 — the same
+        //    anchor the text column uses.
         let zone = NativeRenderer::element("div");
-        NativeRenderer::set_attr(&zone, "data-layout", "row");
+        NativeRenderer::set_attr(&zone, "data-layout", "column");
         NativeRenderer::set_attr(&zone, "data-w",      &spine_zone_w.to_string());
         NativeRenderer::set_attr(&zone, "data-height", &row_h.to_string());
 
-        // Left spacer to center icon horizontally inside the spine zone.
+        spacer(v_pad, &zone); // pushes icon down by v_pad
+
+        // Inner row: horizontal centering of the icon within the spine zone.
+        let icon_row = NativeRenderer::element("div");
+        NativeRenderer::set_attr(&icon_row, "data-layout", "row");
         let icon_left = (spine_zone_w - icon_sz) / 2;
         let zone_spc = NativeRenderer::element("div");
         NativeRenderer::set_attr(&zone_spc, "data-w", &icon_left.to_string());
-        NativeRenderer::append(&zone, &zone_spc);
+        NativeRenderer::append(&icon_row, &zone_spc);
 
         // Rune icon with pulsing circle border.
         let icon_border_w = if is_keystone { 3u32 } else { 2 };
@@ -1641,7 +1649,8 @@ fn rune_tree_column(
         NativeRenderer::set_attr(&img, "data-height",        &icon_sz.to_string());
         NativeRenderer::set_attr(&img, "data-image",         &rune_icon(id));
         NativeRenderer::set_attr(&img, "data-circle-border", &format!("{spine_col}:{icon_border_w}"));
-        NativeRenderer::append(&zone, &img);
+        NativeRenderer::append(&icon_row, &img);
+        NativeRenderer::append(&zone, &icon_row);
         NativeRenderer::append(&slot, &zone);
 
         // ── Text column ──────────────────────────────────────────────────────
