@@ -117,8 +117,18 @@ fn name_slug(s: &str) -> String {
         .collect()
 }
 
+/// Patch notes use display names; Data Dragon uses internal keys for some champs.
+fn ddragon_key(display: &str) -> &str {
+    match name_slug(display).as_str() {
+        "wukong"       => "MonkeyKing",
+        "nunuwillump"  => "Nunu",
+        "renataglascc" => "Renata",
+        _              => display,
+    }
+}
+
 fn is_champion_entry(name: &str) -> bool {
-    let target = name_slug(name);
+    let target = name_slug(ddragon_key(name));
     ALL_CHAMPIONS.iter().any(|&c| name_slug(c) == target)
 }
 
@@ -200,32 +210,30 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
         PatchClass::Neutral => "#888899",
     };
     let badge_label = match cls {
-        PatchClass::Buff    => "BUFF",
-        PatchClass::Nerf    => "NERF",
+        PatchClass::Buff    => "▲ BUFF",
+        PatchClass::Nerf    => "▼ NERF",
         PatchClass::Neutral => "",
     };
 
-    // Collect non-empty summary lines
     let summary_lines: Vec<&str> = change.summary
         .lines()
         .map(str::trim)
         .filter(|l| !l.is_empty())
         .collect();
 
-    // Outer row — display only, height comes from content
+    // Colored left border = the progression spine node; no hover-fill per design.
     let row = NativeRenderer::element("div");
     NativeRenderer::set_attr(&row, "data-layout",        "row");
     NativeRenderer::set_attr(&row, "data-fill",          "transparent");
-    NativeRenderer::set_attr(&row, "data-hover-fill",    theme.surface_hi);
+    NativeRenderer::set_attr(&row, "data-border-left",   &format!("{}:3", badge_color));
     NativeRenderer::set_attr(&row, "data-border-bottom", &format!("{}:1", theme.divider));
-    NativeRenderer::set_attr(&row, "data-pad",           "12 16 12 16");
+    NativeRenderer::set_attr(&row, "data-pad",           "10 16 10 14");
     NativeRenderer::append(parent, &row);
 
-    // Icon / colour stripe
     if show_icon {
-        const ICON_SZ: u32 = 52;
+        const ICON_SZ: u32 = 48;
         let icon_key = ALL_CHAMPIONS.iter().copied()
-            .find(|&c| name_slug(c) == name_slug(&change.patch));
+            .find(|&c| name_slug(c) == name_slug(ddragon_key(&change.patch)));
         let icon = NativeRenderer::element("div");
         NativeRenderer::set_attr(&icon, "data-w",      &ICON_SZ.to_string());
         NativeRenderer::set_attr(&icon, "data-height", &ICON_SZ.to_string());
@@ -235,56 +243,46 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
             NativeRenderer::set_attr(&icon, "data-fill", badge_color);
         }
         NativeRenderer::append(&row, &icon);
-
-        // Gap
         let gap = NativeRenderer::element("div");
-        NativeRenderer::set_attr(&gap, "data-w",      "14");
-        NativeRenderer::set_attr(&gap, "data-height", "1");
-        NativeRenderer::append(&row, &gap);
-    } else {
-        let stripe = NativeRenderer::element("div");
-        NativeRenderer::set_attr(&stripe, "data-w",      "4");
-        NativeRenderer::set_attr(&stripe, "data-height", "1");
-        NativeRenderer::set_attr(&stripe, "data-fill",   badge_color);
-        NativeRenderer::append(&row, &stripe);
-
-        let gap = NativeRenderer::element("div");
-        NativeRenderer::set_attr(&gap, "data-w",      "12");
+        NativeRenderer::set_attr(&gap, "data-w",      "10");
         NativeRenderer::set_attr(&gap, "data-height", "1");
         NativeRenderer::append(&row, &gap);
     }
 
-    // Content column: name + summary lines
     let col = NativeRenderer::element("div");
     NativeRenderer::set_attr(&col, "data-layout", "column");
     NativeRenderer::set_attr(&col, "data-flex",   "1.0");
     NativeRenderer::append(&row, &col);
 
+    // Name + BUFF/NERF pill on the same line
+    let name_row = NativeRenderer::element("div");
+    NativeRenderer::set_attr(&name_row, "data-layout", "row");
+    NativeRenderer::set_attr(&name_row, "data-height", "30");
+    NativeRenderer::append(&col, &name_row);
+
     let name_t = NativeRenderer::text(&change.patch);
     NativeRenderer::set_attr(&name_t, "data-color",       theme.text);
-    NativeRenderer::set_attr(&name_t, "data-text-size",   "22");
+    NativeRenderer::set_attr(&name_t, "data-text-size",   "20");
     NativeRenderer::set_attr(&name_t, "data-text-weight", "bold");
-    NativeRenderer::set_attr(&name_t, "data-height",      "32");
-    NativeRenderer::append(&col, &name_t);
+    NativeRenderer::set_attr(&name_t, "data-height",      "30");
+    NativeRenderer::append(&name_row, &name_t);
+
+    if !badge_label.is_empty() {
+        let pill = NativeRenderer::text(badge_label);
+        NativeRenderer::set_attr(&pill, "data-color",       badge_color);
+        NativeRenderer::set_attr(&pill, "data-text-size",   "13");
+        NativeRenderer::set_attr(&pill, "data-text-weight", "bold");
+        NativeRenderer::set_attr(&pill, "data-height",      "30");
+        NativeRenderer::set_attr(&pill, "data-w",           "65");
+        NativeRenderer::append(&name_row, &pill);
+    }
 
     for line in &summary_lines {
         let lt = NativeRenderer::text(line);
         NativeRenderer::set_attr(&lt, "data-color",     theme.muted);
-        NativeRenderer::set_attr(&lt, "data-text-size", "16");
-        NativeRenderer::set_attr(&lt, "data-height",    "24");
+        NativeRenderer::set_attr(&lt, "data-text-size", "15");
+        NativeRenderer::set_attr(&lt, "data-height",    "22");
         NativeRenderer::append(&col, &lt);
-    }
-
-    // Badge pill on the right — needs explicit data-w so the flex col doesn't crowd it out.
-    if !badge_label.is_empty() {
-        let pill = NativeRenderer::text(badge_label);
-        NativeRenderer::set_attr(&pill, "data-color",       badge_color);
-        NativeRenderer::set_attr(&pill, "data-text-size",   "15");
-        NativeRenderer::set_attr(&pill, "data-text-weight", "bold");
-        NativeRenderer::set_attr(&pill, "data-height",      "32");
-        NativeRenderer::set_attr(&pill, "data-w",           "55");
-        NativeRenderer::set_attr(&pill, "data-pad",         "0 12 0 12");
-        NativeRenderer::append(&row, &pill);
     }
 }
 
@@ -602,14 +600,22 @@ pub fn render_control_panel_into(
                         };
                         s.search_query.clear();
                     }
-                    '\x1c' => {  // ArrowLeft — previous rune page
+                    '\x1c' => {  // ArrowLeft
                         if s.active_tab == Tab::Runes {
                             s.selected_rune_page = s.selected_rune_page.saturating_sub(1);
+                        } else if s.active_tab == Tab::PatchNotes {
+                            const DT: &[PatchDetailTab] = &[PatchDetailTab::Champions, PatchDetailTab::Items, PatchDetailTab::Runes, PatchDetailTab::System];
+                            let idx = DT.iter().position(|&t| t == s.patch_detail_tab).unwrap_or(0);
+                            s.patch_detail_tab = DT[(idx + DT.len() - 1) % DT.len()];
                         }
                     }
-                    '\x1d' => {  // ArrowRight — next rune page
+                    '\x1d' => {  // ArrowRight
                         if s.active_tab == Tab::Runes {
                             s.selected_rune_page = (s.selected_rune_page + 1).min(2);
+                        } else if s.active_tab == Tab::PatchNotes {
+                            const DT: &[PatchDetailTab] = &[PatchDetailTab::Champions, PatchDetailTab::Items, PatchDetailTab::Runes, PatchDetailTab::System];
+                            let idx = DT.iter().position(|&t| t == s.patch_detail_tab).unwrap_or(0);
+                            s.patch_detail_tab = DT[(idx + 1) % DT.len()];
                         }
                     }
                     '\x1e' => {  // ArrowUp — previous tab
@@ -915,19 +921,24 @@ fn rune_champ_header(
     NativeRenderer::set_attr(&role_lbl, "data-h",         &role_h.to_string());
     NativeRenderer::append(&name_col, &role_lbl);
 
-    // CHANGE CHAMPION button — data-overlay so it can be pinned to the
-    // absolute bottom-right of the bar regardless of layout-engine height quirks.
-    const BTN_H:   u32 = 72;
-    const BTN_W:   u32 = 280;
-    const BTN_GAP: u32 = 20;
-    let btn_x = SIDEBAR_W as i32 + main_w as i32 - BTN_W as i32 - BTN_GAP as i32;
-    let btn_y = TITLEBAR_H as i32 + BAR_H as i32 - BTN_H as i32 - BTN_GAP as i32;
+    // CHANGE CHAMPION button — data-overlay, horizontally aligned with the items
+    // card column (same x and width as used in build_preview's side-by-side layout),
+    // vertically centred within BAR_H.
+    const BTN_H: u32 = 72;
+    let side_pad = 12u32;
+    let gap      = 8u32;
+    let items_fw = 364u32; // items_w(360) + border(4)
+    let rune_w   = main_w.saturating_sub(side_pad + gap + items_fw + 4).min(1060).max(500);
+    let rune_fw  = rune_w + 4;
+    let btn_x    = SIDEBAR_W as i32 + side_pad as i32 + rune_fw as i32 + gap as i32;
+    let btn_w    = items_fw;
+    let btn_y    = TITLEBAR_H as i32 + (BAR_H as i32 - BTN_H as i32) / 2;
 
     let change_btn = NativeRenderer::element("div");
     NativeRenderer::set_attr(&change_btn, "data-overlay",       "true");
     NativeRenderer::set_attr(&change_btn, "data-x",             &btn_x.to_string());
     NativeRenderer::set_attr(&change_btn, "data-y",             &btn_y.to_string());
-    NativeRenderer::set_attr(&change_btn, "data-w",             &BTN_W.to_string());
+    NativeRenderer::set_attr(&change_btn, "data-w",             &btn_w.to_string());
     NativeRenderer::set_attr(&change_btn, "data-h",             &BTN_H.to_string());
     NativeRenderer::set_attr(&change_btn, "data-fill",          "#200a10");
     NativeRenderer::set_attr(&change_btn, "data-hover-fill",    theme.accent);
@@ -1524,22 +1535,66 @@ fn build_placeholder(theme: &Theme, parent: &NativeNode) {
     }
 }
 
-/// Vertical rune tree column with connected rows and a path header.
+/// Return the canonical hex color for a rune path style id.
+fn rune_path_color(style_id: u32) -> &'static str {
+    match style_id {
+        8000 => "#C89B3C", // Precision — gold
+        8100 => "#C84B4B", // Domination — crimson
+        8200 => "#4A6BB5", // Sorcery — sapphire
+        8300 => "#49C2C2", // Inspiration — teal
+        8400 => "#4CB85C", // Resolve — emerald
+        _    => "#A0A0A0", // unknown
+    }
+}
+
+/// Linearly interpolate two hex-RGB colors (format `"#RRGGBB"`).
+/// `t` = 0.0 → `a`, `t` = 1.0 → `b`.
+fn lerp_hex(a: &str, b: &str, t: f32) -> String {
+    let parse = |s: &str, lo: usize, hi: usize| -> f32 {
+        u8::from_str_radix(s.get(lo..hi).unwrap_or("00"), 16).unwrap_or(0) as f32
+    };
+    let r = (parse(a, 1, 3) + (parse(b, 1, 3) - parse(a, 1, 3)) * t) as u8;
+    let g = (parse(a, 3, 5) + (parse(b, 3, 5) - parse(a, 3, 5)) * t) as u8;
+    let bv = (parse(a, 5, 7) + (parse(b, 5, 7) - parse(a, 5, 7)) * t) as u8;
+    format!("#{r:02X}{g:02X}{bv:02X}")
+}
+
+/// Vertical rune tree column with a centered progression spine and pulsing
+/// path-colored circle outlines around each rune icon.
 fn rune_tree_column(
     header:     &str,
     is_primary: bool,
+    style_id:   u32,
     perk_ids:   &[u32],
     theme:      &Theme,
     col_w:      u32,
 ) -> NativeNode {
+    // Pulse: smooth 1.5-second cycle, 0.0 (dim) → 1.0 (bright).
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f32();
+    let pulse     = ((secs / 1.5 * std::f32::consts::TAU).sin() + 1.0) * 0.5;
+    let path_col  = rune_path_color(style_id);
+    let dim_col   = lerp_hex("#282828", path_col, 0.30);
+    let spine_col = lerp_hex(&dim_col, path_col, pulse);
+
+    // Spine zone: wide enough to center the largest icon in this column.
+    // Both keystone (160) and secondary (80) icons share the same center so
+    // the spine runs straight through all slots.
+    let max_icon: u32 = if is_primary { 160 } else { 80 };
+    let spine_zone_w  = max_icon + 20; // 10px margin each side
+    let spine_cx      = spine_zone_w / 2; // center of zone in local coords
+
     let col = NativeRenderer::element("div");
     NativeRenderer::set_attr(&col, "data-layout", "column");
     NativeRenderer::set_attr(&col, "data-w",      &col_w.to_string());
+    NativeRenderer::set_attr(&col, "data-fill",   theme.surface);
 
     // Path header bar
     let hdr = hrow(40);
     NativeRenderer::set_attr(&hdr, "data-fill",        theme.surface_hi);
-    NativeRenderer::set_attr(&hdr, "data-border-left", &format!("{}:3", theme.accent));
+    NativeRenderer::set_attr(&hdr, "data-border-left", &format!("{path_col}:3"));
     NativeRenderer::set_attr(&hdr, "data-pad",         "0 0 0 14");
     let t = NativeRenderer::text(header);
     NativeRenderer::set_attr(&t, "data-color",
@@ -1560,41 +1615,49 @@ fn rune_tree_column(
 
     for (i, &id) in perk_ids.iter().enumerate() {
         let is_keystone = is_primary && i == 0;
-        let icon_sz:  u32 = if is_keystone { 160 } else { 80 }; // keystone is exactly 2× secondary
-        let v_pad:    u32 = if is_keystone { 24 }  else { 20 };
-        let row = NativeRenderer::element("div");
-        NativeRenderer::set_attr(&row, "data-layout", "row");
-        // All icons share the same left edge (20px) for column-level visual alignment.
-        NativeRenderer::set_attr(&row, "data-pad", &format!("{v_pad} 0 {v_pad} 20"));
-        if is_keystone {
-            NativeRenderer::set_attr(&row, "data-fill",        theme.surface);
-            NativeRenderer::set_attr(&row, "data-border-left", &format!("{}:4", theme.accent));
-        } else {
-            NativeRenderer::set_attr(&row, "data-fill",        theme.surface);
-            NativeRenderer::set_attr(&row, "data-border-left", &format!("{}:2", theme.divider));
-        }
+        let icon_sz: u32 = if is_keystone { 160 } else { 80 };
+        let v_pad:   u32 = if is_keystone { 24 } else { 20 };
+        let row_h    = v_pad + icon_sz + v_pad;
 
+        let slot = hrow(row_h);
+        NativeRenderer::set_attr(&slot, "data-fill", theme.surface);
+
+        // ── Spine zone: fixed-width, centers the icon horizontally ──────────
+        let zone = NativeRenderer::element("div");
+        NativeRenderer::set_attr(&zone, "data-layout", "row");
+        NativeRenderer::set_attr(&zone, "data-w",      &spine_zone_w.to_string());
+        NativeRenderer::set_attr(&zone, "data-height", &row_h.to_string());
+
+        // Left spacer to center icon horizontally inside the spine zone.
+        let icon_left = (spine_zone_w - icon_sz) / 2;
+        let zone_spc = NativeRenderer::element("div");
+        NativeRenderer::set_attr(&zone_spc, "data-w", &icon_left.to_string());
+        NativeRenderer::append(&zone, &zone_spc);
+
+        // Rune icon with pulsing circle border.
+        let icon_border_w = if is_keystone { 3u32 } else { 2 };
         let img = NativeRenderer::element("div");
-        NativeRenderer::set_attr(&img, "data-w",      &icon_sz.to_string());
-        NativeRenderer::set_attr(&img, "data-height", &icon_sz.to_string());
-        NativeRenderer::set_attr(&img, "data-image",  &rune_icon(id));
-        NativeRenderer::append(&row, &img);
+        NativeRenderer::set_attr(&img, "data-w",             &icon_sz.to_string());
+        NativeRenderer::set_attr(&img, "data-height",        &icon_sz.to_string());
+        NativeRenderer::set_attr(&img, "data-image",         &rune_icon(id));
+        NativeRenderer::set_attr(&img, "data-circle-border", &format!("{spine_col}:{icon_border_w}"));
+        NativeRenderer::append(&zone, &img);
+        NativeRenderer::append(&slot, &zone);
 
-        // Gap between icon and text, scaled with icon size.
+        // ── Text column ──────────────────────────────────────────────────────
+        let gap_w = if is_keystone { 20u32 } else { 16 };
         let gap = NativeRenderer::element("div");
-        NativeRenderer::set_attr(&gap, "data-w", if is_keystone { "28" } else { "20" });
-        NativeRenderer::append(&row, &gap);
+        NativeRenderer::set_attr(&gap, "data-w", &gap_w.to_string());
+        NativeRenderer::append(&slot, &gap);
 
         let font_sz: u32 = if is_keystone { 24 } else { 18 };
         let desc_sz: u32 = if is_keystone { 15 } else { 13 };
         let desc = perk_desc(id);
-        // Center the name+desc block against the icon.
-        // Row padding is symmetric so only icon_sz drives the offset.
         let name_h:   u32 = font_sz + 4;
         let desc_h:   u32 = if desc.is_empty() { 0 } else { desc_sz + 4 };
         let desc_gap: u32 = if desc.is_empty() { 0 } else { 6 };
-        let block_h = name_h + desc_gap + desc_h;
-        let top_pad = icon_sz.saturating_sub(block_h) / 2;
+        let block_h  = name_h + desc_gap + desc_h;
+        let top_pad  = icon_sz.saturating_sub(block_h) / 2 + v_pad;
 
         let text_col = NativeRenderer::element("div");
         NativeRenderer::set_attr(&text_col, "data-layout", "column");
@@ -1618,14 +1681,19 @@ fn rune_tree_column(
             NativeRenderer::append(&text_col, &d);
         }
 
-        NativeRenderer::append(&row, &text_col);
-        NativeRenderer::append(&col, &row);
+        NativeRenderer::append(&slot, &text_col);
+        NativeRenderer::append(&col, &slot);
 
-        // Connector between runes carries the left-border line.
+        // Spine connector after this rune (before the next rune row).
         if i < perk_ids.len() - 1 {
             let conn = hrow(16);
-            NativeRenderer::set_attr(&conn, "data-border-left",
-                &format!("{}:2", theme.divider));
+            let spc = NativeRenderer::element("div");
+            NativeRenderer::set_attr(&spc, "data-w", &(spine_cx - 1).to_string());
+            NativeRenderer::append(&conn, &spc);
+            let line = NativeRenderer::element("div");
+            NativeRenderer::set_attr(&line, "data-w",    "2");
+            NativeRenderer::set_attr(&line, "data-fill", &spine_col);
+            NativeRenderer::append(&conn, &line);
             NativeRenderer::append(&col, &conn);
         }
     }
@@ -1809,6 +1877,7 @@ fn build_preview(
         NativeRenderer::append(&runes_row, &rune_tree_column(
             &format!("PRIMARY  ·  {}", rune_path_name(active.primary_style_id)),
             true,
+            active.primary_style_id,
             &perks[..perks.len().min(4)],
             theme,
             primary_w,
@@ -1823,6 +1892,7 @@ fn build_preview(
         let secondary_col = rune_tree_column(
             &format!("SECONDARY  ·  {}", rune_path_name(active.sub_style_id)),
             false,
+            active.sub_style_id,
             &perks[4.min(perks.len())..6.min(perks.len())],
             theme,
             secondary_w,
@@ -1849,34 +1919,25 @@ fn build_preview(
 
             const SHARD_LABELS: [&str; 3] = ["Offense", "Flex", "Defense"];
             for (si, &id) in perks[6..9].iter().enumerate() {
-                let shard_row = hrow(52);
+                let shard_row = hrow(44);
                 NativeRenderer::set_attr(&shard_row, "data-pad",        "0 0 0 20");
                 NativeRenderer::set_attr(&shard_row, "data-border-left",&format!("{}:1", theme.divider));
 
                 let lbl = NativeRenderer::text(SHARD_LABELS[si]);
                 NativeRenderer::set_attr(&lbl, "data-color",     theme.muted);
-                NativeRenderer::set_attr(&lbl, "data-text-size", "14");
-                NativeRenderer::set_attr(&lbl, "data-h",         "52");
-                NativeRenderer::set_attr(&lbl, "data-pad",       "0 10 0 0");
+                NativeRenderer::set_attr(&lbl, "data-text-size", "13");
+                NativeRenderer::set_attr(&lbl, "data-h",         "44");
+                NativeRenderer::set_attr(&lbl, "data-w",         "80");
                 NativeRenderer::append(&shard_row, &lbl);
 
-                let icon = NativeRenderer::element("div");
-                NativeRenderer::set_attr(&icon, "data-w",      "36");
-                NativeRenderer::set_attr(&icon, "data-height", "36");
-                NativeRenderer::set_attr(&icon, "data-image",  &format!("assets/rune_icons/{id}.png"));
-                NativeRenderer::append(&shard_row, &icon);
-
-                let name = perk_name(id);
-                if !name.is_empty() {
-                    let g = NativeRenderer::element("div");
-                    NativeRenderer::set_attr(&g, "data-w", "10");
-                    NativeRenderer::append(&shard_row, &g);
-                    let name_lbl = NativeRenderer::text(name);
-                    NativeRenderer::set_attr(&name_lbl, "data-color",     theme.accent2);
-                    NativeRenderer::set_attr(&name_lbl, "data-text-size", "15");
-                    NativeRenderer::set_attr(&name_lbl, "data-h",         "52");
-                    NativeRenderer::append(&shard_row, &name_lbl);
-                }
+                let stat = perk_name(id);
+                let stat_text = if stat.is_empty() { format!("#{id}") } else { stat.to_string() };
+                let stat_lbl = NativeRenderer::text(&stat_text);
+                NativeRenderer::set_attr(&stat_lbl, "data-color",       theme.accent2);
+                NativeRenderer::set_attr(&stat_lbl, "data-text-size",   "14");
+                NativeRenderer::set_attr(&stat_lbl, "data-text-weight", "bold");
+                NativeRenderer::set_attr(&stat_lbl, "data-h",           "44");
+                NativeRenderer::append(&shard_row, &stat_lbl);
 
                 NativeRenderer::append(&secondary_col, &shard_row);
                 if si < 2 {
@@ -1955,7 +2016,9 @@ fn build_preview(
     }
 
     // ── Items ─────────────────────────────────────────────────────────────────
-    if !build.items.item_ids.is_empty() {
+    let has_slots = !build.items.slots.is_empty();
+    let has_items = !build.items.item_ids.is_empty();
+    if has_slots || has_items {
         let hr = NativeRenderer::element("div");
         NativeRenderer::set_attr(&hr, "data-h",    "1");
         NativeRenderer::set_attr(&hr, "data-fill", theme.divider);
@@ -1972,24 +2035,63 @@ fn build_preview(
         NativeRenderer::append(&hdr_row, &hdr);
         NativeRenderer::append(&bcard, &hdr_row);
 
-        let items_row = hrow(64);
-        NativeRenderer::set_attr(&items_row, "data-pad",  "8 0 0 20");
-        NativeRenderer::set_attr(&items_row, "data-fill", theme.bg);
-        for (idx, &id) in build.items.item_ids.iter().take(6).enumerate() {
-            if idx > 0 {
-                let sep = NativeRenderer::element("div");
-                NativeRenderer::set_attr(&sep, "data-w",      "8");
-                NativeRenderer::set_attr(&sep, "data-height", "48");
-                NativeRenderer::append(&items_row, &sep);
+        if has_slots {
+            // Three-column grid: one column per item slot, up to 3 options each.
+            // Height: 8(top) + 52(primary) + 4 + 40(alt1) + 4 + 40(alt2) + 8(bot) = 156
+            let slots_row = NativeRenderer::element("div");
+            NativeRenderer::set_attr(&slots_row, "data-layout", "row");
+            NativeRenderer::set_attr(&slots_row, "data-height", "156");
+            NativeRenderer::set_attr(&slots_row, "data-fill",   theme.bg);
+
+            for (si, slot) in build.items.slots.iter().take(3).enumerate() {
+                if si > 0 {
+                    let vdiv = NativeRenderer::element("div");
+                    NativeRenderer::set_attr(&vdiv, "data-w",    "1");
+                    NativeRenderer::set_attr(&vdiv, "data-fill", theme.divider);
+                    NativeRenderer::append(&slots_row, &vdiv);
+                }
+
+                let col = NativeRenderer::element("div");
+                NativeRenderer::set_attr(&col, "data-layout", "column");
+                NativeRenderer::set_attr(&col, "data-flex",   if si < 2 { "0.333" } else { "0.334" });
+                NativeRenderer::set_attr(&col, "data-pad",    "0 0 0 12");
+
+                spacer(8, &col);
+                for (oi, &id) in slot.iter().take(3).enumerate() {
+                    if oi > 0 { spacer(4, &col); }
+                    let icon_sz = if oi == 0 { 52u32 } else { 40 };
+                    let icon = NativeRenderer::element("div");
+                    NativeRenderer::set_attr(&icon, "data-w",      &icon_sz.to_string());
+                    NativeRenderer::set_attr(&icon, "data-height", &icon_sz.to_string());
+                    NativeRenderer::set_attr(&icon, "data-image",  &format!("assets/item_icons/{id}.png"));
+                    NativeRenderer::set_attr(&icon, "data-fill",   theme.surface_hi);
+                    NativeRenderer::append(&col, &icon);
+                }
+                spacer(8, &col);
+                NativeRenderer::append(&slots_row, &col);
             }
-            let slot = NativeRenderer::element("div");
-            NativeRenderer::set_attr(&slot, "data-w",      "48");
-            NativeRenderer::set_attr(&slot, "data-height", "48");
-            NativeRenderer::set_attr(&slot, "data-image",  &format!("assets/item_icons/{id}.png"));
-            NativeRenderer::set_attr(&slot, "data-fill",   theme.surface_hi);
-            NativeRenderer::append(&items_row, &slot);
+            NativeRenderer::append(&bcard, &slots_row);
+        } else {
+            // Fallback: flat row of up to 6 item icons
+            let items_row = hrow(64);
+            NativeRenderer::set_attr(&items_row, "data-pad",  "8 0 0 20");
+            NativeRenderer::set_attr(&items_row, "data-fill", theme.bg);
+            for (idx, &id) in build.items.item_ids.iter().take(6).enumerate() {
+                if idx > 0 {
+                    let sep = NativeRenderer::element("div");
+                    NativeRenderer::set_attr(&sep, "data-w",      "8");
+                    NativeRenderer::set_attr(&sep, "data-height", "48");
+                    NativeRenderer::append(&items_row, &sep);
+                }
+                let slot = NativeRenderer::element("div");
+                NativeRenderer::set_attr(&slot, "data-w",      "48");
+                NativeRenderer::set_attr(&slot, "data-height", "48");
+                NativeRenderer::set_attr(&slot, "data-image",  &format!("assets/item_icons/{id}.png"));
+                NativeRenderer::set_attr(&slot, "data-fill",   theme.surface_hi);
+                NativeRenderer::append(&items_row, &slot);
+            }
+            NativeRenderer::append(&bcard, &items_row);
         }
-        NativeRenderer::append(&bcard, &items_row);
     }
 
     // ── Skill Order ───────────────────────────────────────────────────────────
