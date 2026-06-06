@@ -768,29 +768,20 @@ fn tab_button(
     state_arc: Arc<Mutex<ControlPanelState>>,
     theme:     &Theme,
 ) -> NativeNode {
-    let btn = NativeRenderer::element("div");
-    NativeRenderer::set_attr(&btn, "data-h", "48");
-    NativeRenderer::set_attr(&btn, "data-fill", if active { "#1e1020" } else { "transparent" });
-    NativeRenderer::set_attr(&btn, "data-hover-fill", theme.surface_hi);
-    NativeRenderer::set_attr(
-        &btn, "data-border-left",
-        &format!("{}:4", if active { theme.accent } else { "transparent" }),
-    );
-    NativeRenderer::set_attr(&btn, "data-pad", "0 0 0 14");
-
     let txt = NativeRenderer::text(label);
-    NativeRenderer::set_attr(&txt, "data-color", if active { theme.text } else { "#8888A8" });
-    NativeRenderer::set_attr(&txt, "data-text-size", "14");
-    NativeRenderer::set_attr(&txt, "data-h", "48");
-    NativeRenderer::append(&btn, &txt);
-
-    NativeRenderer::on_event(&btn, "click", Box::new(move |_: BrickEvent| {
+    NativeRenderer::set_attr(&txt, "data-color",       if active { theme.text } else { "#8888A8" });
+    NativeRenderer::set_attr(&txt, "data-text-size",   "14");
+    NativeRenderer::set_attr(&txt, "data-height",      "48");
+    NativeRenderer::set_attr(&txt, "data-fill",        if active { "#1e1020" } else { "transparent" });
+    NativeRenderer::set_attr(&txt, "data-hover-fill",  theme.surface_hi);
+    NativeRenderer::set_attr(&txt, "data-border-left", &format!("{}:4", if active { theme.accent } else { "transparent" }));
+    NativeRenderer::set_attr(&txt, "data-pad",         "0 0 0 14");
+    NativeRenderer::on_event(&txt, "click", Box::new(move |_: BrickEvent| {
         if let Ok(mut s) = state_arc.lock() {
             s.active_tab = tab;
         }
     }));
-
-    btn
+    txt
 }
 
 // ── Main panel ────────────────────────────────────────────────────────────────
