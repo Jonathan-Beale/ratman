@@ -275,14 +275,15 @@ fn patch_entry_row(change: &PatchChange, show_icon: bool, theme: &Theme, parent:
         NativeRenderer::append(&col, &lt);
     }
 
-    // Badge pill on the right
+    // Badge pill on the right — needs explicit data-w so the flex col doesn't crowd it out.
     if !badge_label.is_empty() {
         let pill = NativeRenderer::text(badge_label);
         NativeRenderer::set_attr(&pill, "data-color",       badge_color);
         NativeRenderer::set_attr(&pill, "data-text-size",   "15");
         NativeRenderer::set_attr(&pill, "data-text-weight", "bold");
         NativeRenderer::set_attr(&pill, "data-height",      "32");
-        NativeRenderer::set_attr(&pill, "data-pad",         "0 0 0 12");
+        NativeRenderer::set_attr(&pill, "data-w",           "55");
+        NativeRenderer::set_attr(&pill, "data-pad",         "0 12 0 12");
         NativeRenderer::append(&row, &pill);
     }
 }
@@ -621,6 +622,22 @@ pub fn render_control_panel_into(
                         let idx = TABS.iter().position(|&t| t == s.active_tab).unwrap_or(0);
                         s.active_tab = TABS[(idx + 1) % TABS.len()];
                     }
+                    '\r' | '\n' => {  // Enter — apply runes when on the Runes tab
+                        if s.active_tab == Tab::Runes && !matches!(s.rune_status, RuneStatus::Applying) {
+                            let page = s.current_build.as_ref().and_then(|build| {
+                                let pages: Vec<&RuneRecommendation> = std::iter::once(&build.runes)
+                                    .chain(build.alt_runes.iter())
+                                    .take(3)
+                                    .collect();
+                                let idx = s.selected_rune_page.min(pages.len().saturating_sub(1));
+                                pages.get(idx).map(|p| (*p).clone())
+                            });
+                            if let Some(page) = page {
+                                s.rune_status = RuneStatus::Applying;
+                                let _ = s.rune_tx.try_send(RuneCmd::Apply(page));
+                            }
+                        }
+                    }
                     c if c.is_alphabetic() => { s.search_query.push(c.to_ascii_lowercase()); }
                     _ => {}
                 }
@@ -768,20 +785,22 @@ fn tab_button(
     state_arc: Arc<Mutex<ControlPanelState>>,
     theme:     &Theme,
 ) -> NativeNode {
-    let txt = NativeRenderer::text(label);
-    NativeRenderer::set_attr(&txt, "data-color",       if active { theme.text } else { "#8888A8" });
-    NativeRenderer::set_attr(&txt, "data-text-size",   "14");
-    NativeRenderer::set_attr(&txt, "data-height",      "48");
-    NativeRenderer::set_attr(&txt, "data-fill",        if active { "#1e1020" } else { "transparent" });
-    NativeRenderer::set_attr(&txt, "data-hover-fill",  theme.surface_hi);
-    NativeRenderer::set_attr(&txt, "data-border-left", &format!("{}:4", if active { theme.accent } else { "transparent" }));
-    NativeRenderer::set_attr(&txt, "data-pad",         "0 0 0 14");
-    NativeRenderer::on_event(&txt, "click", Box::new(move |_: BrickEvent| {
-        if let Ok(mut s) = state_arc.lock() {
-            s.active_tab = tab;
-        }
+    // btn must be the hit target (text nodes return None from hit_test).
+    let btn = NativeRenderer::element("div");
+    NativeRenderer::set_attr(&btn, "data-height",      "48");
+    NativeRenderer::set_attr(&btn, "data-fill",        if active { "#1e1020" } else { "transparent" });
+    NativeRenderer::set_attr(&btn, "data-hover-fill",  theme.surface_hi);
+    NativeRenderer::set_attr(&btn, "data-border-left", &format!("{}:4", if active { theme.accent } else { "transparent" }));
+    NativeRenderer::set_attr(&btn, "data-pad",         "0 0 0 14");
+    NativeRenderer::on_event(&btn, "click", Box::new(move |_: BrickEvent| {
+        if let Ok(mut s) = state_arc.lock() { s.active_tab = tab; }
     }));
-    txt
+    let txt = NativeRenderer::text(label);
+    NativeRenderer::set_attr(&txt, "data-color",     if active { theme.text } else { "#8888A8" });
+    NativeRenderer::set_attr(&txt, "data-text-size", "14");
+    NativeRenderer::set_attr(&txt, "data-height",    "48");
+    NativeRenderer::append(&btn, &txt);
+    btn
 }
 
 // ── Main panel ────────────────────────────────────────────────────────────────
@@ -1543,14 +1562,12 @@ fn rune_tree_column(
         let is_keystone = is_primary && i == 0;
         let icon_sz:  u32 = if is_keystone { 160 } else { 80 }; // keystone is exactly 2× secondary
         let v_pad:    u32 = if is_keystone { 24 }  else { 20 };
-        let row_h = icon_sz + v_pad * 2;
-
-        let row = hrow(row_h);
+        let row = NativeRenderer::element("div");
+        NativeRenderer::set_attr(&row, "data-layout", "row");
         // All icons share the same left edge (20px) for column-level visual alignment.
-        NativeRenderer::set_attr(&row, "data-pad",
-            &format!("{v_pad} 0 {v_pad} 20"));
+        NativeRenderer::set_attr(&row, "data-pad", &format!("{v_pad} 0 {v_pad} 20"));
         if is_keystone {
-            NativeRenderer::set_attr(&row, "data-fill",        theme.bg);
+            NativeRenderer::set_attr(&row, "data-fill",        theme.surface);
             NativeRenderer::set_attr(&row, "data-border-left", &format!("{}:4", theme.accent));
         } else {
             NativeRenderer::set_attr(&row, "data-fill",        theme.surface);
@@ -1640,11 +1657,15 @@ fn build_preview(
     NativeRenderer::set_attr(&scroll, "data-height",    &tab_h.to_string());
     NativeRenderer::append(parent, &scroll);
 
-    // Center the card inside an accent-color frame (2px padding = visible border all sides).
-    let card_w   = main_w.min(1060).max(600);
-    let frame_w  = card_w + 4;
-    let side_pad = main_w.saturating_sub(frame_w) / 2;
+    // Side-by-side layout: rune card on the left, items card on the right.
+    let side_pad = 12u32;
+    let gap      = 8u32;
+    let items_w  = 360u32;
+    let items_fw = items_w + 4;
+    let rune_w   = main_w.saturating_sub(side_pad + gap + items_fw + 4).min(1060).max(500);
+    let rune_fw  = rune_w + 4;
 
+    spacer(12, &scroll);
     let center_row = NativeRenderer::element("div");
     NativeRenderer::set_attr(&center_row, "data-layout", "row");
     NativeRenderer::append(&scroll, &center_row);
@@ -1656,14 +1677,14 @@ fn build_preview(
 
     let card_frame = NativeRenderer::element("div");
     NativeRenderer::set_attr(&card_frame, "data-layout", "column");
-    NativeRenderer::set_attr(&card_frame, "data-w",      &frame_w.to_string());
+    NativeRenderer::set_attr(&card_frame, "data-w",      &rune_fw.to_string());
     NativeRenderer::set_attr(&card_frame, "data-fill",   theme.accent);
     NativeRenderer::set_attr(&card_frame, "data-pad",    "2 2 2 2");
     NativeRenderer::append(&center_row, &card_frame);
 
     let card = NativeRenderer::element("div");
     NativeRenderer::set_attr(&card, "data-layout", "column");
-    NativeRenderer::set_attr(&card, "data-w",      &card_w.to_string());
+    NativeRenderer::set_attr(&card, "data-w",      &rune_w.to_string());
     NativeRenderer::set_attr(&card, "data-fill",   theme.surface);
     NativeRenderer::append(&card_frame, &card);
 
@@ -1671,7 +1692,7 @@ fn build_preview(
     {
         const TAB_H: u32 = 100;
         let tabs_row = hrow(TAB_H);
-        NativeRenderer::set_attr(&tabs_row, "data-w",             &card_w.to_string());
+        NativeRenderer::set_attr(&tabs_row, "data-w",             &rune_w.to_string());
         NativeRenderer::set_attr(&tabs_row, "data-fill",          theme.bg);
         NativeRenderer::set_attr(&tabs_row, "data-border-bottom", &format!("{}:2", theme.accent));
 
@@ -1680,16 +1701,19 @@ fn build_preview(
             let is_active = i == page_idx;
 
             let wr_label = if has_page {
-                match all_pages[i].win_rate {
-                    Some(wr) => format!("{wr:.1}% WR"),
-                    None     => "Win Rate".to_string(),
+                let p = all_pages[i];
+                match (p.win_rate, p.pick_rate) {
+                    (Some(wr), Some(pr)) => format!("{wr:.1}% WR  ·  {pr:.1}% PR"),
+                    (Some(wr), None)     => format!("{wr:.1}% WR"),
+                    (None, Some(pr))     => format!("{pr:.1}% PR"),
+                    (None, None)         => "\u{2014}".to_string(),
                 }
             } else {
                 "No data".to_string()
             };
 
             // Last tab absorbs rounding so all three sum exactly to card_w.
-            let tab_w = if i < 2 { card_w / 3 } else { card_w - (card_w / 3) * 2 };
+            let tab_w = if i < 2 { rune_w / 3 } else { rune_w - (rune_w / 3) * 2 };
 
             // Tab: row layout — keystone icon left, text column right.
             let tab = NativeRenderer::element("div");
@@ -1736,7 +1760,10 @@ fn build_preview(
             NativeRenderer::set_attr(&text_col, "data-pad",    "26 0 0 0");
 
             let path_str = if has_page {
-                rune_path_name(all_pages[i].primary_style_id).to_string()
+                let ks_id = all_pages[i].selected_perk_ids.first().copied().unwrap_or(0);
+                let n = perk_name(ks_id);
+                if n.is_empty() { rune_path_name(all_pages[i].primary_style_id).to_string() }
+                else { n.to_string() }
             } else {
                 "\u{2014}".to_string()
             };
@@ -1772,12 +1799,12 @@ fn build_preview(
     if let Some(active) = all_pages.get(page_idx) {
         let perks = &active.selected_perk_ids;
 
-        let primary_w   = (card_w * 58 / 100).max(200);
-        let secondary_w = card_w.saturating_sub(primary_w + 1);
+        let primary_w   = (rune_w * 58 / 100).max(200);
+        let secondary_w = rune_w.saturating_sub(primary_w + 1);
 
         let runes_row = NativeRenderer::element("div");
         NativeRenderer::set_attr(&runes_row, "data-layout", "row");
-        NativeRenderer::set_attr(&runes_row, "data-w",      &card_w.to_string());
+        NativeRenderer::set_attr(&runes_row, "data-w",      &rune_w.to_string());
 
         NativeRenderer::append(&runes_row, &rune_tree_column(
             &format!("PRIMARY  ·  {}", rune_path_name(active.primary_style_id)),
@@ -1878,30 +1905,26 @@ fn build_preview(
 
     spacer(12, &card);
 
-    // ── Build card: spells + items + skill order in its own bordered card ─────
-    spacer(16, &scroll);
-
-    let build_center = NativeRenderer::element("div");
-    NativeRenderer::set_attr(&build_center, "data-layout", "row");
-    NativeRenderer::append(&scroll, &build_center);
-
-    let blspc = NativeRenderer::element("div");
-    NativeRenderer::set_attr(&blspc, "data-w", &side_pad.to_string());
-    NativeRenderer::set_attr(&blspc, "data-h", "1");
-    NativeRenderer::append(&build_center, &blspc);
+    // ── Items card: beside the rune card in center_row ─────────────────────
+    let mid = NativeRenderer::element("div");
+    NativeRenderer::set_attr(&mid, "data-w", &gap.to_string());
+    NativeRenderer::set_attr(&mid, "data-h", "1");
+    NativeRenderer::append(&center_row, &mid);
 
     let bframe = NativeRenderer::element("div");
     NativeRenderer::set_attr(&bframe, "data-layout", "column");
-    NativeRenderer::set_attr(&bframe, "data-w",      &frame_w.to_string());
+    NativeRenderer::set_attr(&bframe, "data-w",      &items_fw.to_string());
     NativeRenderer::set_attr(&bframe, "data-fill",   theme.accent);
     NativeRenderer::set_attr(&bframe, "data-pad",    "2 2 2 2");
-    NativeRenderer::append(&build_center, &bframe);
+    NativeRenderer::append(&center_row, &bframe);
 
     let bcard = NativeRenderer::element("div");
     NativeRenderer::set_attr(&bcard, "data-layout", "column");
-    NativeRenderer::set_attr(&bcard, "data-w",      &card_w.to_string());
+    NativeRenderer::set_attr(&bcard, "data-w",      &items_w.to_string());
     NativeRenderer::set_attr(&bcard, "data-fill",   theme.surface);
     NativeRenderer::append(&bframe, &bcard);
+
+    spacer(12, &bcard);
 
     // ── Summoner Spells ───────────────────────────────────────────────────────
     if !build.summoner_spells.is_empty() {
@@ -1949,21 +1972,19 @@ fn build_preview(
         NativeRenderer::append(&hdr_row, &hdr);
         NativeRenderer::append(&bcard, &hdr_row);
 
-        let items_row = hrow(80);
-        NativeRenderer::set_attr(&items_row, "data-pad",  "0 0 0 20");
+        let items_row = hrow(64);
+        NativeRenderer::set_attr(&items_row, "data-pad",  "8 0 0 20");
         NativeRenderer::set_attr(&items_row, "data-fill", theme.bg);
         for (idx, &id) in build.items.item_ids.iter().take(6).enumerate() {
             if idx > 0 {
-                let arrow = NativeRenderer::text("›");
-                NativeRenderer::set_attr(&arrow, "data-color",     theme.divider);
-                NativeRenderer::set_attr(&arrow, "data-text-size", "22");
-                NativeRenderer::set_attr(&arrow, "data-h",         "80");
-                NativeRenderer::set_attr(&arrow, "data-pad",       "0 8 0 8");
-                NativeRenderer::append(&items_row, &arrow);
+                let sep = NativeRenderer::element("div");
+                NativeRenderer::set_attr(&sep, "data-w",      "8");
+                NativeRenderer::set_attr(&sep, "data-height", "48");
+                NativeRenderer::append(&items_row, &sep);
             }
             let slot = NativeRenderer::element("div");
-            NativeRenderer::set_attr(&slot, "data-w",      "64");
-            NativeRenderer::set_attr(&slot, "data-height", "64");
+            NativeRenderer::set_attr(&slot, "data-w",      "48");
+            NativeRenderer::set_attr(&slot, "data-height", "48");
             NativeRenderer::set_attr(&slot, "data-image",  &format!("assets/item_icons/{id}.png"));
             NativeRenderer::set_attr(&slot, "data-fill",   theme.surface_hi);
             NativeRenderer::append(&items_row, &slot);
@@ -2186,38 +2207,44 @@ fn patch_notes_tab(
             for (patch_ver, patch_changes) in &state.global_patches {
                 let is_sel = selected_ver.as_deref() == Some(patch_ver.as_str());
 
-                // Leaf text nodes so clicks always register on this element
+                // Container div is the hit target (text nodes return None from hit_test).
+                let ver_btn = NativeRenderer::element("div");
+                NativeRenderer::set_attr(&ver_btn, "data-height",      "64");
+                NativeRenderer::set_attr(&ver_btn, "data-fill",        if is_sel { theme.surface_hi } else { "transparent" });
+                NativeRenderer::set_attr(&ver_btn, "data-hover-fill",  theme.surface_hi);
+                NativeRenderer::set_attr(&ver_btn, "data-pad",         "0 0 0 20");
+                if is_sel {
+                    NativeRenderer::set_attr(&ver_btn, "data-border-left", &format!("{}:4", theme.accent));
+                }
+                let pv = patch_ver.clone();
+                let sa = state_arc.clone();
+                NativeRenderer::on_event(&ver_btn, "click", Box::new(move |_: BrickEvent| {
+                    if let Ok(mut s) = sa.lock() { s.selected_patch_ver = Some(pv.clone()); }
+                }));
                 let ver_t = NativeRenderer::text(&format!("Patch {patch_ver}"));
                 NativeRenderer::set_attr(&ver_t, "data-color",       if is_sel { theme.text } else { theme.muted });
                 NativeRenderer::set_attr(&ver_t, "data-text-size",   "18");
                 NativeRenderer::set_attr(&ver_t, "data-text-weight", "bold");
-                NativeRenderer::set_attr(&ver_t, "data-height",           "64");
-                NativeRenderer::set_attr(&ver_t, "data-fill",        if is_sel { theme.surface_hi } else { "transparent" });
-                NativeRenderer::set_attr(&ver_t, "data-hover-fill",  theme.surface_hi);
-                NativeRenderer::set_attr(&ver_t, "data-pad",         "0 0 0 20");
-                if is_sel {
-                    NativeRenderer::set_attr(&ver_t, "data-border-left", &format!("{}:4", theme.accent));
-                }
-                let pv = patch_ver.clone();
-                let sa = state_arc.clone();
-                NativeRenderer::on_event(&ver_t, "click", Box::new(move |_: BrickEvent| {
-                    if let Ok(mut s) = sa.lock() { s.selected_patch_ver = Some(pv.clone()); }
-                }));
-                NativeRenderer::append(&list, &ver_t);
+                NativeRenderer::set_attr(&ver_t, "data-height",      "64");
+                NativeRenderer::append(&ver_btn, &ver_t);
+                NativeRenderer::append(&list, &ver_btn);
 
-                let ct = NativeRenderer::text(&format!("  {} changes", patch_changes.len()));
-                NativeRenderer::set_attr(&ct, "data-color",     theme.muted);
-                NativeRenderer::set_attr(&ct, "data-text-size", "14");
-                NativeRenderer::set_attr(&ct, "data-height",         "32");
-                NativeRenderer::set_attr(&ct, "data-fill",      if is_sel { theme.surface_hi } else { "transparent" });
-                NativeRenderer::set_attr(&ct, "data-hover-fill", theme.surface_hi);
-                NativeRenderer::set_attr(&ct, "data-pad",       "0 0 0 20");
+                let ct_btn = NativeRenderer::element("div");
+                NativeRenderer::set_attr(&ct_btn, "data-height",     "32");
+                NativeRenderer::set_attr(&ct_btn, "data-fill",       if is_sel { theme.surface_hi } else { "transparent" });
+                NativeRenderer::set_attr(&ct_btn, "data-hover-fill", theme.surface_hi);
+                NativeRenderer::set_attr(&ct_btn, "data-pad",        "0 0 0 20");
                 let pv2 = patch_ver.clone();
                 let sa2 = state_arc.clone();
-                NativeRenderer::on_event(&ct, "click", Box::new(move |_: BrickEvent| {
+                NativeRenderer::on_event(&ct_btn, "click", Box::new(move |_: BrickEvent| {
                     if let Ok(mut s) = sa2.lock() { s.selected_patch_ver = Some(pv2.clone()); }
                 }));
-                NativeRenderer::append(&list, &ct);
+                let ct = NativeRenderer::text(&format!("{} changes", patch_changes.len()));
+                NativeRenderer::set_attr(&ct, "data-color",     theme.muted);
+                NativeRenderer::set_attr(&ct, "data-text-size", "14");
+                NativeRenderer::set_attr(&ct, "data-height",    "32");
+                NativeRenderer::append(&ct_btn, &ct);
+                NativeRenderer::append(&list, &ct_btn);
 
                 spacer(8, &list);
             }
@@ -2314,23 +2341,28 @@ fn patch_notes_tab(
                 (PatchDetailTab::System,    "SYSTEM",    system_entries.len()),
             ] {
                 let is_active = state.patch_detail_tab == dt;
+                // Container div is the hit target (text nodes return None from hit_test).
+                let lbl_btn = NativeRenderer::element("div");
+                NativeRenderer::set_attr(&lbl_btn, "data-layout",      "row");
+                NativeRenderer::set_attr(&lbl_btn, "data-height",      &TAB_BAR_H.to_string());
+                NativeRenderer::set_attr(&lbl_btn, "data-w",           "155");
+                NativeRenderer::set_attr(&lbl_btn, "data-fill",        if is_active { theme.surface_hi } else { "transparent" });
+                NativeRenderer::set_attr(&lbl_btn, "data-hover-fill",  theme.surface_hi);
+                NativeRenderer::set_attr(&lbl_btn, "data-pad",         "0 0 0 16");
+                if is_active {
+                    NativeRenderer::set_attr(&lbl_btn, "data-border-bottom", &format!("{}:3", theme.accent));
+                }
+                let sa = state_arc.clone();
+                NativeRenderer::on_event(&lbl_btn, "click", Box::new(move |_: BrickEvent| {
+                    if let Ok(mut s) = sa.lock() { s.patch_detail_tab = dt; }
+                }));
                 let lbl = NativeRenderer::text(&format!("{label}  {count}"));
                 NativeRenderer::set_attr(&lbl, "data-color",       if is_active { theme.text } else { theme.muted });
                 NativeRenderer::set_attr(&lbl, "data-text-size",   "16");
                 NativeRenderer::set_attr(&lbl, "data-text-weight", "bold");
-                NativeRenderer::set_attr(&lbl, "data-height",           &TAB_BAR_H.to_string());
-                NativeRenderer::set_attr(&lbl, "data-w",           "155");
-                NativeRenderer::set_attr(&lbl, "data-fill",        if is_active { theme.surface_hi } else { "transparent" });
-                NativeRenderer::set_attr(&lbl, "data-hover-fill",  theme.surface_hi);
-                NativeRenderer::set_attr(&lbl, "data-pad",         "0 0 0 16");
-                if is_active {
-                    NativeRenderer::set_attr(&lbl, "data-border-bottom", &format!("{}:3", theme.accent));
-                }
-                let sa = state_arc.clone();
-                NativeRenderer::on_event(&lbl, "click", Box::new(move |_: BrickEvent| {
-                    if let Ok(mut s) = sa.lock() { s.patch_detail_tab = dt; }
-                }));
-                NativeRenderer::append(&tab_bar, &lbl);
+                NativeRenderer::set_attr(&lbl, "data-height",      &TAB_BAR_H.to_string());
+                NativeRenderer::append(&lbl_btn, &lbl);
+                NativeRenderer::append(&tab_bar, &lbl_btn);
             }
 
             // Scrollable entry list
