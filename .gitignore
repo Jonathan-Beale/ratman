@@ -75,6 +75,15 @@ DataGen/Assets/
 *.safetensors
 **/marvels_dungeons_diffusers
 *.pt
+*.pth
 *.png
 *.jpg
 *.mp4
+
+# IDE / OS / tool caches (folded in from the old `Untitled` draft)
+.DS_Store
+.vscode/
+.idea/
+runs/
+gradio_cached_examples/
+yolov8-env/
