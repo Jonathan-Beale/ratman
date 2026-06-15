@@ -42,7 +42,10 @@ print(torch.version.cuda)
 # =========================
 # PROMPTS
 # =========================
-COMIC_PROMPT = """highly detailed face, highly detailed body, highly detailed 1boy, white background, monochrome, plain white background, solo, spider-man noir, goggles, mask, trench coat, gloves, vest, pants, hat, boots, belt, comic book style, masterpiece, best quality, 4k"""
+COMIC_PROMPT = """ratman, highly detailed, brown hooded cloak, yellow rat logo on chest, 
+face mask, glowing eyes, tactical belt, boots, comic book style, 
+masterpiece, best quality, 4k, black background"""
+
 NEGATIVE_PROMPT = """easynegative, verybadimagenegative_v1.3, negative_hand-neg, background, detailed background, outdoor, indoor, scenery, buildings, city, rain, dynamic background, colorful background, blurry, low quality, bad anatomy, extra limbs, worst quality"""
 
 # =========================
@@ -106,8 +109,8 @@ pipe.scheduler = EulerDiscreteScheduler.from_config(
 # =========================
 # LOAD MULTIPLE LORAS
 # =========================
-pipe.load_lora_weights("SpidermanNoirLora.safetensors", adapter_name="spiderman_noir")
-pipe.set_adapters(["spiderman_noir"], adapter_weights=[1.0])
+pipe.load_lora_weights("Ratman_v1.safetensors", adapter_name="ratman")
+pipe.set_adapters(["ratman"], adapter_weights=[1.0])
 pipe.fuse_lora()
 
 # =========================

@@ -1,4 +1,21 @@
-Need to download FFmpeg : https://www.ffmpeg.org/
+# Need to download FFmpeg : https://www.ffmpeg.org/
 py -m pip install ffmpeg-python
-py -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
 
+py -m pip install --upgrade pip setuptools wheel
+
+:: CUDA (pick ONE)
+py -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+:: OR
+:: py -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
+
+py -m pip install diffusers transformers accelerate safetensors huggingface_hub
+
+py -m pip install pillow numpy opencv-python scipy ftfy einops
+
+py -m pip install xformers
+
+py -m pip install controlnet-aux
+
+py -m pip install imageio-ffmpeg
+
+py -m pip install requests tqdm pyyaml packaging sympy networkx
